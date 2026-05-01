@@ -78,10 +78,24 @@
 }
 
 @media print {
-  .no-print {
-    display: none !important;
-  }
-  .print-only {
-    display: block !important;
-  }
+  .no-print  { display: none !important; }
+  .print-only { display: block !important; }
+
+  /* Hide sidebar/header chrome */
+  aside, nav { display: none !important; }
+
+  /* Reset layout so content fills the page */
+  body { background: white !important; }
+  .flex.h-screen.overflow-hidden { display: block !important; height: auto !important; overflow: visible !important; }
+  .flex-1.overflow-y-auto { overflow: visible !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+
+  /* Page settings */
+  @page { margin: 15mm; size: A4; }
+
+  /* Force backgrounds & borders to print */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Avoid splitting key sections across pages */
+  .print-no-break { page-break-inside: avoid; break-inside: avoid; }
 }

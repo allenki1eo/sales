@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       pending, approved, customers, products,
       totalRevenue, monthlyRevenue, monthlyCartons,
       trend, topProducts, topCustomers, recent,
+      exportVsLocal, topRoutes,
     ] = await Promise.all([
       db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'pending'"),
       db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'approved'"),
@@ -86,6 +87,30 @@ export async function GET(req: NextRequest) {
         JOIN users u ON r.user_id = u.id
         ORDER BY r.created_at DESC
         LIMIT 10`),
+
+      db.execute(`
+        SELECT c.is_export,
+               COALESCE(SUM(ri.total_price), 0) as revenue,
+               COALESCE(SUM(ri.quantity), 0) as cartons,
+               COUNT(DISTINCT r.id) as orders
+        FROM requests r
+        JOIN customers c ON r.customer_id = c.id
+        JOIN request_items ri ON ri.request_id = r.id
+        WHERE r.status IN ('approved','dispatched')
+        GROUP BY c.is_export`),
+
+      db.execute(`
+        SELECT r.route,
+               COALESCE(SUM(ri.quantity), 0) as cartons,
+               COALESCE(SUM(ri.total_price), 0) as revenue,
+               COUNT(DISTINCT r.id) as orders
+        FROM requests r
+        JOIN request_items ri ON ri.request_id = r.id
+        WHERE r.status IN ('approved','dispatched')
+          AND r.route != ''
+        GROUP BY r.route
+        ORDER BY cartons DESC
+        LIMIT 8`),
     ]);
 
     return NextResponse.json({
@@ -102,6 +127,8 @@ export async function GET(req: NextRequest) {
       topProducts:    topProducts.rows,
       topCustomers:   topCustomers.rows,
       recentRequests: recent.rows,
+      exportVsLocal:  exportVsLocal.rows,
+      topRoutes:      topRoutes.rows,
     });
   } catch (err: any) {
     console.error("[API /dashboard GET]", err);
