@@ -28,10 +28,10 @@ try {
 
     } elseif ($dbDriver === 'sqlite') {
         // SQLite Connection (local file - compatible with Turso local replicas)
-        $sqlitePath = env('DB_SQLITE_PATH', __DIR__ . '/database.sqlite');;
+        $sqlitePath = env('DB_SQLITE_PATH', __DIR__ . '/database.sqlite');
 
         // If path is relative, make it absolute from project root
-        if (!file_exists($sqlitePath) && !str_starts_with($sqlitePath, '/') && !str_starts_with($sqlitePath, '\\')) {
+        if (!file_exists($sqlitePath) && substr($sqlitePath, 0, 1) !== '/' && substr($sqlitePath, 0, 1) !== '\\') {
             $sqlitePath = __DIR__ . '/' . $sqlitePath;
         }
 
