@@ -61,9 +61,16 @@ export default function RequestsPage() {
       });
       const res = await fetch(`/api/requests?${params}`);
       const data = await res.json();
-      setRequests(data.data);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
+      if (!res.ok) {
+        toast.error(data.error || "Failed to load requests");
+        setRequests([]);
+        setTotal(0);
+        setTotalPages(1);
+        return;
+      }
+      setRequests(data.data || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
     } finally {
       setLoading(false);
     }

@@ -7,53 +7,58 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const page   = parseInt(searchParams.get("page")  || "1");
-  const limit  = parseInt(searchParams.get("limit") || "10");
-  const search = searchParams.get("search") || "";
-  const status = searchParams.get("status") || "";
-  const offset = (page - 1) * limit;
+  try {
+    const { searchParams } = new URL(req.url);
+    const page   = parseInt(searchParams.get("page")  || "1");
+    const limit  = parseInt(searchParams.get("limit") || "10");
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "";
+    const offset = (page - 1) * limit;
 
-  let where = "WHERE 1=1";
-  const args: (string | number)[] = [];
+    let where = "WHERE 1=1";
+    const args: (string | number)[] = [];
 
-  if (search) {
-    where += " AND (c.name LIKE ? OR r.truck_no LIKE ? OR r.route LIKE ?)";
-    args.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    if (search) {
+      where += " AND (c.name LIKE ? OR r.truck_no LIKE ? OR r.route LIKE ?)";
+      args.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (status) {
+      where += " AND r.status = ?";
+      args.push(status);
+    }
+
+    const countResult = await db.execute({
+      sql: `SELECT COUNT(*) as total FROM requests r JOIN customers c ON r.customer_id = c.id ${where}`,
+      args,
+    });
+
+    const rows = await db.execute({
+      sql: `SELECT r.id, r.status, r.truck_no AS truck_number, r.driver_name, r.route,
+                   r.vat_percent AS vat_percentage, r.created_at,
+                   c.name as customer_name, c.location as customer_location,
+                   u.full_name as user_name
+            FROM requests r
+            JOIN customers c ON r.customer_id = c.id
+            JOIN users u ON r.user_id = u.id
+            ${where}
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?`,
+      args: [...args, limit, offset],
+    });
+
+    const total = Number(countResult.rows[0].total) || 0;
+
+    return NextResponse.json({
+      data: rows.rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (err: any) {
+    console.error("[API /requests GET]", err);
+    return NextResponse.json({ error: err.message || "Database error" }, { status: 500 });
   }
-  if (status) {
-    where += " AND r.status = ?";
-    args.push(status);
-  }
-
-  const countResult = await db.execute({
-    sql: `SELECT COUNT(*) as total FROM requests r JOIN customers c ON r.customer_id = c.id ${where}`,
-    args,
-  });
-
-  const rows = await db.execute({
-    sql: `SELECT r.id, r.status, r.truck_no AS truck_number, r.driver_name, r.route,
-                 r.vat_percent AS vat_percentage, r.created_at,
-                 c.name as customer_name, c.location as customer_location,
-                 u.full_name as user_name
-          FROM requests r
-          JOIN customers c ON r.customer_id = c.id
-          JOIN users u ON r.user_id = u.id
-          ${where}
-          ORDER BY r.created_at DESC
-          LIMIT ? OFFSET ?`,
-    args: [...args, limit, offset],
-  });
-
-  const total = countResult.rows[0].total as number;
-
-  return NextResponse.json({
-    data: rows.rows,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  });
 }
 
 export async function POST(req: NextRequest) {

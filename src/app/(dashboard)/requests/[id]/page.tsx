@@ -42,14 +42,19 @@ export default function ViewRequestPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [request, setRequest] = useState<RequestDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     fetch(`/api/requests/${params.id}`)
-      .then((r) => { if (!r.ok) throw new Error("Not found"); return r.json(); })
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      })
       .then(setRequest)
-      .catch(() => { toast.error("Request not found"); router.push("/requests"); });
-  }, [params.id, router]);
+      .catch((err) => { setError(err.message || "Failed to load request"); });
+  }, [params.id]);
 
   const handleApprove = async () => {
     setApproving(true);
@@ -64,6 +69,20 @@ export default function ViewRequestPage() {
     }
     setApproving(false);
   };
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
+          <p className="text-sm font-medium text-destructive">Error loading request</p>
+          <p className="text-xs text-muted-foreground mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!request) {
     return (

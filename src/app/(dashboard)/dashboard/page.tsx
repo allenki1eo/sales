@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface DashboardData {
   stats: {
@@ -69,9 +70,17 @@ export default function DashboardPage() {
   useEffect(() => {
     setLoading(true);
     fetch(`/api/dashboard?month=${selectedMonth}`)
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) {
+          toast.error(d.error || "Failed to load dashboard");
+          setData(null);
+        } else {
+          setData(d);
+        }
+        setLoading(false);
+      })
+      .catch(() => { setData(null); setLoading(false); });
   }, [selectedMonth]);
 
   if (loading) {

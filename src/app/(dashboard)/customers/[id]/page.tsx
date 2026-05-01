@@ -29,22 +29,35 @@ export default function ViewCustomerPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [editedPrices, setEditedPrices] = useState<Record<number, number>>({});
   const [savingPrice, setSavingPrice] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/customers/${params.id}`).then((r) => r.json()),
-      fetch(`/api/customers/${params.id}/prices`).then((r) => r.json()),
-      fetch(`/api/requests?search=&limit=20`).then((r) => r.json()),
+      fetch(`/api/customers/${params.id}`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      }),
+      fetch(`/api/customers/${params.id}/prices`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      }),
+      fetch(`/api/requests?search=&limit=100`).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      }),
     ]).then(([c, p, req]) => {
       setCustomer(c);
       setPrices(p);
       const edited: Record<number, number> = {};
       p.forEach((pr: CustomerPrice) => { edited[pr.product_id] = pr.price; });
       setEditedPrices(edited);
-      // filter by customer
-      setOrders(req.data?.filter((r: { customer_name?: string }) => true) || []);
-    }).catch(() => { toast.error("Failed to load customer"); router.push("/customers"); });
-  }, [params.id, router]);
+      // filter orders by this customer
+      setOrders(req.data?.filter((r: { customer_name?: string }) => r.customer_name === c.name) || []);
+    }).catch((err) => { setError(err.message || "Failed to load customer"); });
+  }, [params.id]);
 
   const handleSavePrice = async (productId: number) => {
     setSavingPrice(productId);
@@ -57,6 +70,20 @@ export default function ViewCustomerPage() {
     else { toast.error("Failed to update price"); }
     setSavingPrice(null);
   };
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
+          <p className="text-sm font-medium text-destructive">Error loading customer</p>
+          <p className="text-xs text-muted-foreground mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!customer) {
     return (
