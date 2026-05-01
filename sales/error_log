@@ -1,0 +1,39 @@
+[20-Dec-2025 02:01:26 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'w2t39uh6cc89r6b9_auditr.users' doesn't exist in /home/w2t39uh6cc89r6b9/public_html/sales/login.php:14
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/login.php(14): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/login.php on line 14
+[20-Dec-2025 02:01:33 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'w2t39uh6cc89r6b9_auditr.users' doesn't exist in /home/w2t39uh6cc89r6b9/public_html/sales/login.php:14
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/login.php(14): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/login.php on line 14
+[20-Dec-2025 02:01:58 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'w2t39uh6cc89r6b9_auditr.users' doesn't exist in /home/w2t39uh6cc89r6b9/public_html/sales/login.php:14
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/login.php(14): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/login.php on line 14
+[20-Dec-2025 02:15:36 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/customers.php on line 21
+[20-Dec-2025 02:16:01 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/customers.php on line 21
+[20-Dec-2025 02:25:46 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/customers.php on line 21
+[20-Dec-2025 02:33:25 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/edit_customer.php on line 70
+[20-Dec-2025 02:34:43 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/customers.php on line 21
+[20-Dec-2025 02:37:25 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/customers.php on line 21
+[20-Dec-2025 02:37:43 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/edit_customer.php on line 70
+[20-Dec-2025 02:38:16 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/edit_customer.php on line 70
+[20-Dec-2025 02:42:04 America/Los_Angeles] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/w2t39uh6cc89r6b9/public_html/sales/includes/header.php:17) in /home/w2t39uh6cc89r6b9/public_html/sales/edit_customer.php on line 24
+[20-Dec-2025 07:47:26 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 1451 Cannot delete or update a parent row: a foreign key constraint fails (`w2t39uh6cc89r6b9_auditr`.`request_signatures`, CONSTRAINT `request_signatures_ibfk_2` FOREIGN KEY (`signer_id`) REFERENCES `users` (`id`)) in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php:26
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/admin.php(26): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php on line 26
+[20-Dec-2025 07:47:41 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 1451 Cannot delete or update a parent row: a foreign key constraint fails (`w2t39uh6cc89r6b9_auditr`.`request_signatures`, CONSTRAINT `request_signatures_ibfk_2` FOREIGN KEY (`signer_id`) REFERENCES `users` (`id`)) in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php:26
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/admin.php(26): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php on line 26
+[20-Dec-2025 07:48:37 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 1451 Cannot delete or update a parent row: a foreign key constraint fails (`w2t39uh6cc89r6b9_auditr`.`request_signatures`, CONSTRAINT `request_signatures_ibfk_2` FOREIGN KEY (`signer_id`) REFERENCES `users` (`id`)) in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php:26
+Stack trace:
+#0 /home/w2t39uh6cc89r6b9/public_html/sales/admin.php(26): PDOStatement->execute(Array)
+#1 {main}
+  thrown in /home/w2t39uh6cc89r6b9/public_html/sales/admin.php on line 26
