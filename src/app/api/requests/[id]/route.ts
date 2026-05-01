@@ -7,41 +7,46 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [reqResult, itemsResult, sigsResult] = await Promise.all([
-    db.execute({
-      sql: `SELECT r.*, c.name as customer_name, c.location as customer_location,
-                   c.is_export, c.charges_efd, c.efd_profit_per_carton,
-                   u.full_name as user_name
-            FROM requests r
-            JOIN customers c ON r.customer_id = c.id
-            JOIN users u ON r.user_id = u.id
-            WHERE r.id = ?`,
-      args: [params.id],
-    }),
-    db.execute({
-      sql: `SELECT ri.*, p.name as product_name, p.carton_weight
-            FROM request_items ri
-            JOIN products p ON ri.product_id = p.id
-            WHERE ri.request_id = ?`,
-      args: [params.id],
-    }),
-    db.execute({
-      sql: `SELECT rs.*, u.full_name as user_name
-            FROM request_signatures rs
-            JOIN users u ON rs.user_id = u.id
-            WHERE rs.request_id = ?
-            ORDER BY rs.signed_at ASC`,
-      args: [params.id],
-    }),
-  ]);
+  try {
+    const [reqResult, itemsResult, sigsResult] = await Promise.all([
+      db.execute({
+        sql: `SELECT r.*, c.name as customer_name, c.location as customer_location,
+                     c.is_export, c.charges_efd, c.efd_profit_per_carton,
+                     u.full_name as user_name
+              FROM requests r
+              JOIN customers c ON r.customer_id = c.id
+              JOIN users u ON r.user_id = u.id
+              WHERE r.id = ?`,
+        args: [params.id],
+      }),
+      db.execute({
+        sql: `SELECT ri.*, p.name as product_name, p.carton_weight
+              FROM request_items ri
+              JOIN products p ON ri.product_id = p.id
+              WHERE ri.request_id = ?`,
+        args: [params.id],
+      }),
+      db.execute({
+        sql: `SELECT rs.*, u.full_name as user_name
+              FROM request_signatures rs
+              JOIN users u ON rs.user_id = u.id
+              WHERE rs.request_id = ?
+              ORDER BY rs.signed_at ASC`,
+        args: [params.id],
+      }),
+    ]);
 
-  if (!reqResult.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!reqResult.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({
-    ...reqResult.rows[0],
-    items:      itemsResult.rows,
-    signatures: sigsResult.rows,
-  });
+    return NextResponse.json({
+      ...reqResult.rows[0],
+      items:      itemsResult.rows,
+      signatures: sigsResult.rows,
+    });
+  } catch (err: any) {
+    console.error("[API /requests/:id GET]", err);
+    return NextResponse.json({ error: err.message || "Database error" }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {

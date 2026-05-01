@@ -7,10 +7,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const result = await db.execute({ sql: "SELECT * FROM customers WHERE id = ?", args: [params.id] });
-  if (!result.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    const result = await db.execute({ sql: "SELECT * FROM customers WHERE id = ?", args: [params.id] });
+    if (!result.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json(result.rows[0]);
+    return NextResponse.json(result.rows[0]);
+  } catch (err: any) {
+    console.error("[API /customers/:id GET]", err);
+    return NextResponse.json({ error: err.message || "Database error" }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
