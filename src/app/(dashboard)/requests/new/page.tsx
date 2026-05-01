@@ -91,7 +91,7 @@ export default function NewRequestPage() {
   const isExport = selectedCustomer?.is_export;
   const vatAmount = isExport ? 0 : subtotal * 0.18;
   const efdCharge = selectedCustomer?.charges_efd
-    ? watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (selectedCustomer.efd_profit_per_carton || 0) * 0.18, 0)
+    ? watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (selectedCustomer.efd_profit_per_carton || 0), 0)
     : 0;
   const total = subtotal + vatAmount + efdCharge;
 

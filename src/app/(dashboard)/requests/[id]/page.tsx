@@ -156,7 +156,7 @@ export default function ViewRequestPage() {
   const vatAmount  = request.is_export ? 0 : subtotal * (request.vat_percentage / 100);
   const grandTotal = subtotal + vatAmount;
   const efdCharge   = request.charges_efd
-    ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton * 0.18, 0)
+    ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton, 0)
     : 0;
   const totalWeight = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
 
