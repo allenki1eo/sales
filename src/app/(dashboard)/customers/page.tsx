@@ -56,9 +56,16 @@ export default function CustomersPage() {
       const params = new URLSearchParams({ page: String(page), limit: "10", search });
       const res = await fetch(`/api/customers?${params}`);
       const data = await res.json();
-      setCustomers(data.data);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
+      if (!res.ok) {
+        toast.error(data.error || "Failed to load customers");
+        setCustomers([]);
+        setTotal(0);
+        setTotalPages(1);
+        return;
+      }
+      setCustomers(data.data || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
     } finally {
       setLoading(false);
     }

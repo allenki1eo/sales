@@ -41,9 +41,17 @@ export default function ProductsPage() {
   const fetchProducts = () => {
     setLoading(true);
     fetch("/api/products")
-      .then((r) => r.json())
-      .then((data) => { setProducts(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          toast.error(data.error || "Failed to load products");
+          setProducts([]);
+        } else {
+          setProducts(Array.isArray(data) ? data : []);
+        }
+        setLoading(false);
+      })
+      .catch(() => { setProducts([]); setLoading(false); });
   };
 
   useEffect(() => { fetchProducts(); }, []);

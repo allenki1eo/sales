@@ -62,9 +62,17 @@ export default function AdminPage() {
   const fetchUsers = () => {
     setLoading(true);
     fetch("/api/users")
-      .then((r) => r.json())
-      .then((data) => { setUsers(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          toast.error(data.error || "Failed to load users");
+          setUsers([]);
+        } else {
+          setUsers(Array.isArray(data) ? data : []);
+        }
+        setLoading(false);
+      })
+      .catch(() => { setUsers([]); setLoading(false); });
   };
 
   const onCreateUser = async (data: UserForm) => {
