@@ -10,7 +10,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   try {
     const [reqResult, itemsResult, sigsResult] = await Promise.all([
       db.execute({
-        sql: `SELECT r.*, c.name as customer_name, c.location as customer_location,
+        sql: `SELECT r.id, r.user_id, r.customer_id, r.status,
+                     r.truck_no AS truck_number, r.driver_name, r.route,
+                     r.request_date, r.vat_percent AS vat_percentage, r.created_at,
+                     c.name as customer_name, c.location as customer_location,
                      c.is_export, c.charges_efd, c.efd_profit_per_carton,
                      u.full_name as user_name
               FROM requests r
@@ -27,9 +30,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         args: [params.id],
       }),
       db.execute({
-        sql: `SELECT rs.*, u.full_name as user_name
+        sql: `SELECT rs.id, rs.request_id, rs.signer_id AS user_id, rs.signature_type, rs.signed_at,
+                     u.full_name as user_name
               FROM request_signatures rs
-              JOIN users u ON rs.user_id = u.id
+              JOIN users u ON rs.signer_id = u.id
               WHERE rs.request_id = ?
               ORDER BY rs.signed_at ASC`,
         args: [params.id],
@@ -55,19 +59,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const body = await req.json();
   const { truck_number, driver_name, route, status, items } = body;
-  const now = new Date().toISOString();
 
-  const setClauses: string[] = ["updated_at = ?"];
-  const vals: (string | number)[] = [now];
+  const setClauses: string[] = [];
+  const vals: (string | number | null)[] = [];
 
-  if (truck_number !== undefined) { setClauses.push("truck_number = ?"); vals.push(truck_number); }
+  if (truck_number !== undefined) { setClauses.push("truck_no = ?"); vals.push(truck_number); }
   if (driver_name  !== undefined) { setClauses.push("driver_name = ?");  vals.push(driver_name); }
   if (route        !== undefined) { setClauses.push("route = ?");         vals.push(route); }
   if (status       !== undefined) { setClauses.push("status = ?");        vals.push(status); }
 
-  const stmts: { sql: string; args: (string | number)[] }[] = [
-    { sql: `UPDATE requests SET ${setClauses.join(", ")} WHERE id = ?`, args: [...vals, params.id] },
-  ];
+  const stmts: { sql: string; args: (string | number | null)[] }[] = [];
+
+  if (setClauses.length > 0) {
+    stmts.push({ sql: `UPDATE requests SET ${setClauses.join(", ")} WHERE id = ?`, args: [...vals, params.id] });
+  }
 
   if (items) {
     stmts.push({ sql: "DELETE FROM request_items WHERE request_id = ?", args: [params.id] });
