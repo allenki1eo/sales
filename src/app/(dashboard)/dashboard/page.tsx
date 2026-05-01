@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { SalesChart } from "@/components/dashboard/sales-chart";
+import { RevenueBreakdownChart } from "@/components/dashboard/revenue-breakdown-chart";
+import { TopRoutesChart } from "@/components/dashboard/top-routes-chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +42,8 @@ interface DashboardData {
     id: number; status: string; truck_number: string; route: string;
     created_at: string; customer_name: string; user_name: string;
   }>;
+  exportVsLocal: Array<{ is_export: number; revenue: number; cartons: number; orders: number }>;
+  topRoutes: Array<{ route: string; cartons: number; revenue: number; orders: number }>;
 }
 
 const statusConfig = {
@@ -188,12 +192,18 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Chart + Top lists */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <SalesChart data={data.trend} />
-        </div>
+      {/* Sales Trend (full width) */}
+      <SalesChart data={data.trend} />
 
+      {/* Market breakdown + Top routes */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RevenueBreakdownChart data={data.exportVsLocal} />
+        <TopRoutesChart data={data.topRoutes} />
+      </div>
+
+      {/* Top Products + Top Customers */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-3 grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="space-y-4">
           {/* Top Products */}
           <Card>
@@ -252,6 +262,7 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+        </div>
         </div>
       </div>
 
