@@ -1,0 +1,105 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import db from "@/lib/db";
+
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const month = searchParams.get("month") || new Date().toISOString().slice(0, 7);
+
+  const [
+    pending, approved, customers, products,
+    totalRevenue, monthlyRevenue, monthlyCartons,
+    trend, topProducts, topCustomers, recent,
+  ] = await Promise.all([
+    db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'pending'"),
+    db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'approved'"),
+    db.execute("SELECT COUNT(*) as count FROM customers"),
+    db.execute("SELECT COUNT(*) as count FROM products"),
+
+    db.execute(`
+      SELECT COALESCE(SUM(ri.total_price), 0) as total
+      FROM request_items ri
+      JOIN requests r ON ri.request_id = r.id
+      WHERE r.status IN ('approved','dispatched')`),
+
+    db.execute({
+      sql: `SELECT COALESCE(SUM(ri.total_price), 0) as total
+            FROM request_items ri
+            JOIN requests r ON ri.request_id = r.id
+            WHERE r.status IN ('approved','dispatched')
+            AND strftime('%Y-%m', r.created_at) = ?`,
+      args: [month],
+    }),
+
+    db.execute({
+      sql: `SELECT COALESCE(SUM(ri.quantity), 0) as total
+            FROM request_items ri
+            JOIN requests r ON ri.request_id = r.id
+            WHERE r.status IN ('approved','dispatched')
+            AND strftime('%Y-%m', r.created_at) = ?`,
+      args: [month],
+    }),
+
+    db.execute(`
+      SELECT strftime('%Y-%m', r.created_at) as month,
+             COALESCE(SUM(ri.total_price), 0) as revenue,
+             COALESCE(SUM(ri.quantity), 0) as cartons
+      FROM requests r
+      LEFT JOIN request_items ri ON ri.request_id = r.id
+      WHERE r.status IN ('approved','dispatched')
+        AND r.created_at >= datetime('now', '-6 months')
+      GROUP BY strftime('%Y-%m', r.created_at)
+      ORDER BY month ASC`),
+
+    db.execute(`
+      SELECT p.id as product_id, p.name as product_name,
+             COALESCE(SUM(ri.total_price), 0) as total_revenue,
+             COALESCE(SUM(ri.quantity), 0) as total_cartons
+      FROM products p
+      LEFT JOIN request_items ri ON ri.product_id = p.id
+      LEFT JOIN requests r ON ri.request_id = r.id AND r.status IN ('approved','dispatched')
+      GROUP BY p.id, p.name
+      ORDER BY total_revenue DESC
+      LIMIT 5`),
+
+    db.execute(`
+      SELECT c.id as customer_id, c.name as customer_name,
+             COALESCE(SUM(ri.total_price), 0) as total_revenue,
+             COUNT(DISTINCT r.id) as total_orders
+      FROM customers c
+      LEFT JOIN requests r ON r.customer_id = c.id AND r.status IN ('approved','dispatched')
+      LEFT JOIN request_items ri ON ri.request_id = r.id
+      GROUP BY c.id, c.name
+      ORDER BY total_revenue DESC
+      LIMIT 5`),
+
+    db.execute(`
+      SELECT r.id, r.status, r.truck_number, r.route, r.created_at,
+             c.name as customer_name, u.full_name as user_name
+      FROM requests r
+      JOIN customers c ON r.customer_id = c.id
+      JOIN users u ON r.user_id = u.id
+      ORDER BY r.created_at DESC
+      LIMIT 10`),
+  ]);
+
+  return NextResponse.json({
+    stats: {
+      pending_requests:  pending.rows[0].count,
+      approved_requests: approved.rows[0].count,
+      total_customers:   customers.rows[0].count,
+      total_products:    products.rows[0].count,
+      total_revenue:     totalRevenue.rows[0].total,
+      monthly_revenue:   monthlyRevenue.rows[0].total,
+      monthly_cartons:   monthlyCartons.rows[0].total,
+    },
+    trend:          trend.rows,
+    topProducts:    topProducts.rows,
+    topCustomers:   topCustomers.rows,
+    recentRequests: recent.rows,
+  });
+}
