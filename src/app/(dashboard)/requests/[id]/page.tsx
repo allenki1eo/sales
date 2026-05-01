@@ -532,6 +532,7 @@ export default function ViewRequestPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginTop: "10px" }}>
             {ALL_SIG_TYPES.map((type) => {
               const sig = sigMap[type];
+              const showName = type !== "approved_by";
               return (
                 <div key={type} style={{ textAlign: "center" }}>
                   <div style={{ fontSize: "8pt", textTransform: "uppercase", marginBottom: "28px" }}>
@@ -539,11 +540,7 @@ export default function ViewRequestPage() {
                   </div>
                   <div style={{ borderBottom: "1px solid #000", marginBottom: "3px" }} />
                   <div style={{ fontSize: "8pt" }}>
-                    {sig ? `${sig.user_name}` : "Name"}
-                  </div>
-                  <div style={{ borderBottom: "1px solid #000", marginTop: "16px", marginBottom: "3px" }} />
-                  <div style={{ fontSize: "8pt" }}>
-                    {sig ? formatDate(sig.signed_at) : "Date"}
+                    {showName && sig ? sig.user_name : " "}
                   </div>
                 </div>
               );
