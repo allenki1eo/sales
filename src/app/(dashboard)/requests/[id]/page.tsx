@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   ArrowLeft, Printer, CheckCircle, Pencil, Truck,
-  User, MapPin, Calendar, Package, Receipt,
+  User, MapPin, Calendar, Package, Receipt, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,9 +44,11 @@ export default function ViewRequestPage() {
   const params  = useParams();
   const router  = useRouter();
   const { data: session } = useSession();
-  const [request, setRequest]   = useState<RequestDetail | null>(null);
-  const [error, setError]       = useState<string | null>(null);
+  const [request, setRequest]     = useState<RequestDetail | null>(null);
+  const [error, setError]         = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const docRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch(`/api/requests/${params.id}`)
@@ -73,6 +75,59 @@ export default function ViewRequestPage() {
     setApproving(false);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!docRef.current || !request) return;
+    setDownloading(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const canvas = await html2canvas(docRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const imgW = pageW - margin * 2;
+      const imgH = (canvas.height * imgW) / canvas.width;
+
+      if (imgH <= pageH - margin * 2) {
+        pdf.addImage(imgData, "PNG", margin, margin, imgW, imgH);
+      } else {
+        // Multi-page: slice canvas into A4-height chunks
+        const sliceH = Math.floor((canvas.width * (pageH - margin * 2)) / imgW);
+        let yOffset = 0;
+        let page = 0;
+        while (yOffset < canvas.height) {
+          if (page > 0) pdf.addPage();
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = Math.min(sliceH, canvas.height - yOffset);
+          const ctx = sliceCanvas.getContext("2d")!;
+          ctx.drawImage(canvas, 0, -yOffset);
+          const sliceData = sliceCanvas.toDataURL("image/png");
+          const sliceImgH = (sliceCanvas.height * imgW) / canvas.width;
+          pdf.addImage(sliceData, "PNG", margin, margin, imgW, sliceImgH);
+          yOffset += sliceH;
+          page++;
+        }
+      }
+
+      pdf.save(`Request-${request.id}-${request.customer_name.replace(/\s+/g, "_")}.pdf`);
+      toast.success("PDF downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate PDF");
+    }
+    setDownloading(false);
+  };
+
   if (error) {
     return (
       <div className="max-w-4xl mx-auto space-y-6">
@@ -95,12 +150,17 @@ export default function ViewRequestPage() {
     );
   }
 
-  const subtotal    = request.items.reduce((s, i) => s + Number(i.total_price), 0);
-  const vatAmount   = request.is_export ? 0 : subtotal * (request.vat_percentage / 100);
+  // Financial calculations
+  // Prices stored are VAT-inclusive for local customers.
+  // GRAND TOTAL = sum of item total_price (already incl. VAT)
+  // SUBTOTAL (ex-VAT) = grandTotal / 1.18
+  // VAT = grandTotal - subtotal
+  const grandTotal  = request.items.reduce((s, i) => s + Number(i.total_price), 0);
+  const subtotal    = request.is_export ? grandTotal : grandTotal / (1 + request.vat_percentage / 100);
+  const vatAmount   = grandTotal - subtotal;
   const efdCharge   = request.charges_efd
     ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton * 0.18, 0)
     : 0;
-  const grandTotal  = subtotal + vatAmount + efdCharge;
   const totalWeight = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
 
   const canApprove = (session?.user?.role === "accountant" || session?.user?.role === "admin")
@@ -110,6 +170,8 @@ export default function ViewRequestPage() {
   const displayDate = request.request_date
     ? formatDate(request.request_date)
     : formatDate(request.created_at);
+
+  const refNo = `${new Date(request.request_date || request.created_at).getFullYear()}${String(request.id).padStart(4, "0")}`;
 
   return (
     <>
@@ -131,6 +193,10 @@ export default function ViewRequestPage() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="h-4 w-4 mr-1" />Print
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={downloading}>
+              <Download className="h-4 w-4 mr-1" />
+              {downloading ? "Generating…" : "Download PDF"}
             </Button>
             {session?.user?.role === "admin" && (
               <Button variant="outline" size="sm" asChild>
@@ -214,7 +280,7 @@ export default function ViewRequestPage() {
                   <tr className="border-b bg-muted/30">
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">#</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Product</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Qty (cartons)</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Qty</th>
                     <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Unit Price</th>
                     <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Total</th>
                   </tr>
@@ -289,191 +355,200 @@ export default function ViewRequestPage() {
         )}
       </div>
 
-      {/* ── PRINT DOCUMENT ── hidden on screen, shown when printing ── */}
-      <div className="hidden print-only" style={{ fontFamily: "Arial, sans-serif", color: "#000", fontSize: "11pt" }}>
-
-        {/* Company Header */}
-        <div className="print-no-break" style={{ textAlign: "center", borderBottom: "2px solid #000", paddingBottom: "10px", marginBottom: "12px" }}>
-          <div style={{ fontSize: "17pt", fontWeight: "bold", letterSpacing: "1px" }}>
-            EAST AFRICAN SPIRIT (T) LTD
-          </div>
-          <div style={{ fontSize: "9pt", color: "#333", marginTop: "2px" }}>
-            Sales &amp; Distribution Division
-          </div>
-        </div>
-
-        {/* Document Title + Number */}
-        <div className="print-no-break" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
-          <div>
-            <div style={{ fontSize: "13pt", fontWeight: "bold", textTransform: "uppercase" }}>
-              Delivery / Sales Request
+      {/* ── PRINT / PDF DOCUMENT ── hidden on screen, shown when printing ── */}
+      <div className="hidden print-only">
+        <div
+          ref={docRef}
+          style={{
+            fontFamily: "Arial, sans-serif",
+            color: "#000",
+            fontSize: "10pt",
+            background: "#fff",
+            padding: "20px 24px",
+            maxWidth: "700px",
+            margin: "0 auto",
+            border: "1px solid #000",
+          }}
+        >
+          {/* ── Company Header ── */}
+          <div style={{ textAlign: "center", marginBottom: "8px" }}>
+            <div style={{ fontSize: "14pt", fontWeight: "bold", letterSpacing: "0.5px" }}>
+              EAST AFRICAN SPIRIT (T) LTD.
             </div>
-            <div style={{ fontSize: "9pt", color: "#555", marginTop: "2px" }}>
-              Status:{" "}
-              <span style={{ fontWeight: "bold", textTransform: "capitalize" }}>
-                {request.status}
-              </span>
-              {request.is_export && " · Export (Tax-Exempt)"}
-              {request.charges_efd && " · EFD Charges Apply"}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "13pt", fontWeight: "bold" }}>No. {request.id}</div>
-            <div style={{ fontSize: "9pt", color: "#555", marginTop: "2px" }}>Date: {displayDate}</div>
-            <div style={{ fontSize: "9pt", color: "#555" }}>Prepared: {formatDate(request.created_at)}</div>
-          </div>
-        </div>
-
-        {/* Customer + Delivery Info — two columns */}
-        <div className="print-no-break" style={{
-          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "14px",
-        }}>
-          <div style={{ border: "1px solid #000", padding: "8px 10px" }}>
-            <div style={{ fontWeight: "bold", fontSize: "9pt", textTransform: "uppercase", borderBottom: "1px solid #aaa", paddingBottom: "4px", marginBottom: "6px" }}>
-              Customer
-            </div>
-            <table style={{ fontSize: "10pt", width: "100%", borderCollapse: "collapse" }}>
-              <tbody>
-                <tr>
-                  <td style={{ color: "#555", paddingRight: "6px", paddingBottom: "3px", whiteSpace: "nowrap" }}>Name:</td>
-                  <td style={{ fontWeight: "bold" }}>{request.customer_name}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: "#555", paddingBottom: "3px" }}>Location:</td>
-                  <td>{request.customer_location || "—"}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: "#555" }}>Type:</td>
-                  <td>{request.is_export ? "Export (No VAT)" : "Local (18% VAT)"}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div style={{ fontSize: "9pt", marginTop: "2px" }}>P.O.BOX 707 SHINYANGA</div>
           </div>
 
-          <div style={{ border: "1px solid #000", padding: "8px 10px" }}>
-            <div style={{ fontWeight: "bold", fontSize: "9pt", textTransform: "uppercase", borderBottom: "1px solid #aaa", paddingBottom: "4px", marginBottom: "6px" }}>
-              Delivery Details
-            </div>
-            <table style={{ fontSize: "10pt", width: "100%", borderCollapse: "collapse" }}>
-              <tbody>
-                <tr>
-                  <td style={{ color: "#555", paddingRight: "6px", paddingBottom: "3px", whiteSpace: "nowrap" }}>Truck No:</td>
-                  <td style={{ fontWeight: "bold", fontFamily: "monospace" }}>{request.truck_number || "—"}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: "#555", paddingBottom: "3px" }}>Driver:</td>
-                  <td>{request.driver_name || "—"}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: "#555" }}>Route:</td>
-                  <td>{request.route || "—"}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+          <div style={{ borderBottom: "1px solid #000", marginBottom: "10px" }} />
 
-        {/* Products Table */}
-        <div className="print-no-break" style={{ marginBottom: "12px" }}>
-          <div style={{ fontWeight: "bold", fontSize: "9pt", textTransform: "uppercase", marginBottom: "4px" }}>
-            Products / Items
+          {/* ── Info Grid ── */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "10px" }}>
+            <tbody>
+              <tr>
+                <td style={{ width: "50%", padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Customer: </span>{request.customer_name}
+                </td>
+                <td style={{ width: "50%", padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Date: </span>{displayDate}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Truck No: </span>{request.truck_number || "—"}
+                </td>
+                <td style={{ padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Route: </span>{request.route || "—"}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Driver: </span>{request.driver_name || "—"}
+                </td>
+                <td style={{ padding: "2px 4px" }}>
+                  <span style={{ fontWeight: "bold" }}>Ref: </span>{refNo}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* ── Document Title ── */}
+          <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "11pt", textDecoration: "underline", marginBottom: "10px", textTransform: "uppercase" }}>
+            Request Note for Cartons
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10pt" }}>
+
+          {/* ── Products Table ── */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "8px" }}>
             <thead>
-              <tr style={{ backgroundColor: "#f0f0f0" }}>
-                <th style={{ border: "1px solid #000", padding: "5px 8px", textAlign: "left", width: "30px" }}>#</th>
-                <th style={{ border: "1px solid #000", padding: "5px 8px", textAlign: "left" }}>Product Description</th>
-                <th style={{ border: "1px solid #000", padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Qty (Cartons)</th>
-                <th style={{ border: "1px solid #000", padding: "5px 8px", textAlign: "right" }}>Unit Price (TZS)</th>
-                <th style={{ border: "1px solid #000", padding: "5px 8px", textAlign: "right" }}>Total (TZS)</th>
+              <tr style={{ backgroundColor: "#f5f5f5" }}>
+                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center", width: "32px" }}>S/N</th>
+                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "left" }}>PRODUCT NAME</th>
+                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center", width: "50px" }}>QTY</th>
+                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "right", width: "110px" }}>PRICE@</th>
+                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "right", width: "120px" }}>TOTAL</th>
               </tr>
             </thead>
             <tbody>
               {request.items.map((item, i) => (
                 <tr key={i}>
-                  <td style={{ border: "1px solid #ccc", padding: "5px 8px", textAlign: "center" }}>{i + 1}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "5px 8px" }}>{item.product_name}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "5px 8px", textAlign: "right" }}>{item.quantity.toLocaleString()}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "5px 8px", textAlign: "right" }}>{Number(item.unit_price).toLocaleString()}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "5px 8px", textAlign: "right", fontWeight: "bold" }}>{Number(item.total_price).toLocaleString()}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "center" }}>{i + 1}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>{item.product_name}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "center" }}>{item.quantity.toLocaleString()}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>{Number(item.unit_price).toLocaleString()}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>{Number(item.total_price).toLocaleString()}</td>
+                </tr>
+              ))}
+              {/* Empty rows to pad the table */}
+              {request.items.length < 6 && Array.from({ length: 6 - request.items.length }).map((_, i) => (
+                <tr key={`empty-${i}`}>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
 
-        {/* Totals */}
-        <div className="print-no-break" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
-          <table style={{ fontSize: "10pt", borderCollapse: "collapse", minWidth: "260px" }}>
+          {/* ── Totals ── */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "12px" }}>
             <tbody>
               <tr>
-                <td style={{ padding: "3px 12px 3px 0", color: "#555" }}>Subtotal (excl. VAT)</td>
-                <td style={{ padding: "3px 0", textAlign: "right" }}>{formatCurrency(subtotal)}</td>
+                <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", width: "70%" }}>
+                  SUBTOTAL (Excl. VAT)
+                </td>
+                <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", width: "30%", fontWeight: "bold" }}>
+                  {Math.round(subtotal).toLocaleString()}
+                </td>
               </tr>
               {!request.is_export && (
                 <tr>
-                  <td style={{ padding: "3px 12px 3px 0", color: "#555" }}>VAT ({request.vat_percentage}%)</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{formatCurrency(vatAmount)}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>
+                    VAT ({request.vat_percentage}%)
+                  </td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>
+                    {Math.round(vatAmount).toLocaleString()}
+                  </td>
                 </tr>
               )}
               {request.charges_efd && (
                 <tr>
-                  <td style={{ padding: "3px 12px 3px 0", color: "#555" }}>EFD Charge</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{formatCurrency(efdCharge)}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>EFD Charge</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>
+                    {Math.round(efdCharge).toLocaleString()}
+                  </td>
                 </tr>
               )}
-              {totalWeight > 0 && (
-                <tr>
-                  <td style={{ padding: "3px 12px 3px 0", color: "#555" }}>Total Weight</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{totalWeight.toFixed(1)} kg</td>
-                </tr>
-              )}
-              <tr>
-                <td colSpan={2} style={{ borderTop: "2px solid #000", padding: "0" }} />
-              </tr>
-              <tr>
-                <td style={{ padding: "5px 12px 3px 0", fontWeight: "bold", fontSize: "11pt" }}>GRAND TOTAL</td>
-                <td style={{ padding: "5px 0 3px", fontWeight: "bold", fontSize: "11pt", textAlign: "right" }}>
-                  {formatCurrency(grandTotal)}
+              <tr style={{ backgroundColor: "#f5f5f5" }}>
+                <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
+                  GRAND TOTAL (Incl. VAT)
+                </td>
+                <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
+                  {Math.round(grandTotal + efdCharge).toLocaleString()}
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
 
-        {/* Signature Boxes */}
-        <div className="print-no-break" style={{ borderTop: "1px solid #000", paddingTop: "14px" }}>
-          <div style={{ fontWeight: "bold", fontSize: "9pt", textTransform: "uppercase", marginBottom: "10px" }}>
-            Authorisation &amp; Signatures
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+          {/* ── Weight Table ── */}
+          {totalWeight > 0 && (
+            <>
+              <div style={{ fontSize: "9pt", fontWeight: "bold", marginBottom: "4px", textTransform: "uppercase" }}>
+                Weight Summary
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9pt", marginBottom: "14px" }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#f5f5f5" }}>
+                    <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "left" }}>Product</th>
+                    <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center", width: "50px" }}>Qty</th>
+                    <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center", width: "80px" }}>Wt/Ctn (kg)</th>
+                    <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right", width: "90px" }}>Total (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {request.items.filter((i) => i.carton_weight > 0).map((item, i) => (
+                    <tr key={i}>
+                      <td style={{ border: "1px solid #ccc", padding: "3px 6px" }}>{item.product_name}</td>
+                      <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center" }}>{item.quantity}</td>
+                      <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center" }}>{item.carton_weight}</td>
+                      <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right" }}>
+                        {(item.quantity * item.carton_weight).toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ backgroundColor: "#f5f5f5" }}>
+                    <td colSpan={3} style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right", fontWeight: "bold" }}>
+                      TOTAL WEIGHT
+                    </td>
+                    <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right", fontWeight: "bold" }}>
+                      {totalWeight.toFixed(1)} kg
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* ── Signatures ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginTop: "10px" }}>
             {ALL_SIG_TYPES.map((type) => {
               const sig = sigMap[type];
               return (
                 <div key={type} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "8pt", color: "#555", textTransform: "uppercase", marginBottom: "6px" }}>
+                  <div style={{ fontSize: "8pt", textTransform: "uppercase", marginBottom: "28px" }}>
                     {sigTypeLabel[type]}
                   </div>
-                  {/* Signature area */}
-                  <div style={{ borderBottom: "1px solid #000", minHeight: "44px", marginBottom: "4px", position: "relative" }}>
-                    {sig && (
-                      <div style={{ fontSize: "9pt", fontWeight: "bold", position: "absolute", bottom: "4px", left: 0, right: 0, textAlign: "center" }}>
-                        {sig.user_name}
-                      </div>
-                    )}
+                  <div style={{ borderBottom: "1px solid #000", marginBottom: "3px" }} />
+                  <div style={{ fontSize: "8pt" }}>
+                    {sig ? `${sig.user_name}` : "Name"}
                   </div>
-                  <div style={{ fontSize: "8pt", color: "#555" }}>
-                    {sig ? `${sig.user_name} · ${formatDate(sig.signed_at)}` : "Name / Date"}
+                  <div style={{ borderBottom: "1px solid #000", marginTop: "16px", marginBottom: "3px" }} />
+                  <div style={{ fontSize: "8pt" }}>
+                    {sig ? formatDate(sig.signed_at) : "Date"}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ marginTop: "18px", borderTop: "1px solid #ccc", paddingTop: "6px", fontSize: "8pt", color: "#777", textAlign: "center" }}>
-          This document was generated by the EAS Sales Management System · Request #{request.id} · {formatDate(request.created_at)}
         </div>
       </div>
     </>
