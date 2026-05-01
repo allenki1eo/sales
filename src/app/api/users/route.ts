@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import pool from "@/lib/db";
-import { RowDataPacket, ResultSetHeader } from "mysql2";
+import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const [rows] = await pool.execute<RowDataPacket[]>(
+  const result = await db.execute(
     "SELECT id, username, full_name, role, created_at FROM users ORDER BY full_name ASC"
   );
-
-  return NextResponse.json(rows);
+  return NextResponse.json(result.rows);
 }
 
 export async function POST(req: NextRequest) {
@@ -31,21 +29,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "All fields are required" }, { status: 400 });
   }
 
-  const [existing] = await pool.execute<RowDataPacket[]>(
-    "SELECT id FROM users WHERE username = ?",
-    [username]
-  );
-
-  if (existing.length) {
+  const existing = await db.execute({ sql: "SELECT id FROM users WHERE username = ?", args: [username] });
+  if (existing.rows.length) {
     return NextResponse.json({ error: "Username already taken" }, { status: 409 });
   }
 
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  const [result] = await pool.execute<ResultSetHeader>(
-    "INSERT INTO users (username, full_name, password, role) VALUES (?, ?, ?, ?)",
-    [username, full_name, hashedPassword, role]
-  );
+  const result = await db.execute({
+    sql: "INSERT INTO users (username, full_name, password, role) VALUES (?, ?, ?, ?)",
+    args: [username, full_name, hashedPassword, role],
+  });
 
-  return NextResponse.json({ id: result.insertId }, { status: 201 });
+  return NextResponse.json({ id: Number(result.lastInsertRowid) }, { status: 201 });
 }

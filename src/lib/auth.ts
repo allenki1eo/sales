@@ -1,8 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import pool from "@/lib/db";
-import { RowDataPacket } from "mysql2";
+import db from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -15,26 +14,26 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
 
-        const [rows] = await pool.execute<RowDataPacket[]>(
-          "SELECT * FROM users WHERE username = ?",
-          [credentials.username]
-        );
+        const result = await db.execute({
+          sql: "SELECT * FROM users WHERE username = ?",
+          args: [credentials.username],
+        });
 
-        const user = rows[0];
+        const user = result.rows[0];
         if (!user) return null;
 
         const passwordMatch = await bcrypt.compare(
           credentials.password,
-          user.password
+          user.password as string
         );
         if (!passwordMatch) return null;
 
         return {
           id: String(user.id),
-          name: user.full_name,
-          email: user.username,
-          role: user.role,
-          signature_path: user.signature_path,
+          name: user.full_name as string,
+          email: user.username as string,
+          role: user.role as string,
+          signature_path: user.signature_path as string | undefined,
         };
       },
     }),
@@ -57,12 +56,7 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 8 * 60 * 60,
-  },
+  pages: { signIn: "/login" },
+  session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
   secret: process.env.NEXTAUTH_SECRET,
 };
