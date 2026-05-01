@@ -151,13 +151,10 @@ export default function ViewRequestPage() {
   }
 
   // Financial calculations
-  // Prices stored are VAT-inclusive for local customers.
-  // GRAND TOTAL = sum of item total_price (already incl. VAT)
-  // SUBTOTAL (ex-VAT) = grandTotal / 1.18
-  // VAT = grandTotal - subtotal
-  const grandTotal  = request.items.reduce((s, i) => s + Number(i.total_price), 0);
-  const subtotal    = request.is_export ? grandTotal : grandTotal / (1 + request.vat_percentage / 100);
-  const vatAmount   = grandTotal - subtotal;
+  // Prices stored are ex-VAT. VAT is added on top for local customers.
+  const subtotal   = request.items.reduce((s, i) => s + Number(i.total_price), 0);
+  const vatAmount  = request.is_export ? 0 : subtotal * (request.vat_percentage / 100);
+  const grandTotal = subtotal + vatAmount;
   const efdCharge   = request.charges_efd
     ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton * 0.18, 0)
     : 0;
