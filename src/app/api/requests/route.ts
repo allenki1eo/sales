@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const args: (string | number)[] = [];
 
   if (search) {
-    where += " AND (c.name LIKE ? OR r.truck_number LIKE ? OR r.route LIKE ?)";
+    where += " AND (c.name LIKE ? OR r.truck_no LIKE ? OR r.route LIKE ?)";
     args.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (status) {
@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
   });
 
   const rows = await db.execute({
-    sql: `SELECT r.id, r.status, r.truck_number, r.driver_name, r.route,
-                 r.vat_percentage, r.created_at, r.updated_at,
+    sql: `SELECT r.id, r.status, r.truck_no AS truck_number, r.driver_name, r.route,
+                 r.vat_percent AS vat_percentage, r.created_at,
                  c.name as customer_name, c.location as customer_location,
                  u.full_name as user_name
           FROM requests r
@@ -63,16 +63,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { customer_id, truck_number, driver_name, route, items } = body;
 
-  if (!customer_id || !truck_number || !driver_name || !route || !items?.length) {
+  if (!customer_id || !driver_name || !route || !items?.length) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
+  const today = new Date().toISOString().slice(0, 10);
 
   const insertRequest = await db.execute({
-    sql: `INSERT INTO requests (customer_id, user_id, truck_number, driver_name, route, vat_percentage, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 18, 'pending', ?, ?)`,
-    args: [customer_id, parseInt(session.user.id), truck_number, driver_name, route, now, now],
+    sql: `INSERT INTO requests (customer_id, user_id, truck_no, driver_name, route, request_date, vat_percent, status)
+          VALUES (?, ?, ?, ?, ?, ?, 18, 'pending')`,
+    args: [customer_id, parseInt(session.user.id), truck_number || null, driver_name, route, today],
   });
 
   const requestId = Number(insertRequest.lastInsertRowid);
@@ -84,9 +84,9 @@ export async function POST(req: NextRequest) {
       args: [requestId, item.product_id, item.quantity, item.unit_price, item.quantity * item.unit_price],
     })),
     {
-      sql: `INSERT INTO request_signatures (request_id, user_id, signature_type, signed_at)
-            VALUES (?, ?, 'prepared_by', ?)`,
-      args: [requestId, session.user.id, now],
+      sql: `INSERT INTO request_signatures (request_id, signer_id, signature_type)
+            VALUES (?, ?, 'prepared_by')`,
+      args: [requestId, session.user.id],
     },
   ];
 

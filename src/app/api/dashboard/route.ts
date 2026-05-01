@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
       LIMIT 5`),
 
     db.execute(`
-      SELECT r.id, r.status, r.truck_number, r.route, r.created_at,
+      SELECT r.id, r.status, r.truck_no AS truck_number, r.route, r.created_at,
              c.name as customer_name, u.full_name as user_name
       FROM requests r
       JOIN customers c ON r.customer_id = c.id
