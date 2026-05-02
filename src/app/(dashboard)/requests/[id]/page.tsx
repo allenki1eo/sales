@@ -151,13 +151,16 @@ export default function ViewRequestPage() {
   }
 
   // Financial calculations
-  // Prices stored are ex-VAT. VAT is added on top for local customers.
-  const subtotal   = request.items.reduce((s, i) => s + Number(i.total_price), 0);
-  const vatAmount  = request.is_export ? 0 : subtotal * (request.vat_percentage / 100);
-  const grandTotal = subtotal + vatAmount;
-  const efdCharge   = request.charges_efd
+  // For local customers: prices are VAT-inclusive.
+  // For export customers: prices are VAT-exclusive.
+  const grossTotal = request.items.reduce((s, i) => s + Number(i.total_price), 0);
+  const isExport   = request.is_export;
+  const subtotal   = isExport ? grossTotal : grossTotal / 1.18;
+  const vatAmount  = isExport ? 0 : subtotal * (request.vat_percentage / 100);
+  const efdCharge  = request.charges_efd
     ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton, 0)
     : 0;
+  const grandTotal = grossTotal + efdCharge;
   const totalWeight = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
 
   const canApprove = (session?.user?.role === "accountant" || session?.user?.role === "admin")
@@ -321,7 +324,7 @@ export default function ViewRequestPage() {
                 )}
                 <Separator />
                 <div className="flex justify-between font-bold text-base">
-                  <span>Grand Total</span>
+                  <span>Grand Total {isExport ? "" : "(Incl. VAT)"}</span>
                   <span className="text-indigo-600">{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
@@ -477,10 +480,10 @@ export default function ViewRequestPage() {
               )}
               <tr style={{ backgroundColor: "#f5f5f5" }}>
                 <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
-                  GRAND TOTAL (Incl. VAT)
+                  GRAND TOTAL {request.is_export ? "" : "(Incl. VAT)"}
                 </td>
                 <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
-                  {Math.round(grandTotal + efdCharge).toLocaleString()}
+                  {Math.round(grandTotal).toLocaleString()}
                 </td>
               </tr>
             </tbody>

@@ -87,13 +87,14 @@ export default function NewRequestPage() {
     c.location.toLowerCase().includes(customerSearch.toLowerCase())
   );
 
-  const subtotal = watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (item.unit_price || 0), 0);
+  const grossTotal = watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (item.unit_price || 0), 0);
   const isExport = selectedCustomer?.is_export;
+  const subtotal = isExport ? grossTotal : grossTotal / 1.18;
   const vatAmount = isExport ? 0 : subtotal * 0.18;
   const efdCharge = selectedCustomer?.charges_efd
     ? watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (selectedCustomer.efd_profit_per_carton || 0), 0)
     : 0;
-  const total = subtotal + vatAmount + efdCharge;
+  const total = grossTotal + efdCharge;
 
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
@@ -335,7 +336,7 @@ export default function NewRequestPage() {
               )}
               <Separator />
               <div className="flex justify-between font-bold">
-                <span>Total</span>
+                <span>Total {isExport ? "" : "(Incl. VAT)"}</span>
                 <span className="text-indigo-600">{formatCurrency(total)}</span>
               </div>
             </div>
