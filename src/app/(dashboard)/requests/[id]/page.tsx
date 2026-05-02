@@ -63,16 +63,21 @@ export default function ViewRequestPage() {
 
   const handleApprove = async () => {
     setApproving(true);
-    const res = await fetch(`/api/requests/${params.id}/sign`, { method: "POST" });
-    if (res.ok) {
-      toast.success("Request approved successfully");
-      const updated = await fetch(`/api/requests/${params.id}`).then((r) => r.json());
-      setRequest(updated);
-    } else {
-      const err = await res.json();
-      toast.error(err.error || "Failed to approve");
+    try {
+      const res = await fetch(`/api/requests/${params.id}/sign`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Request approved successfully");
+        const updated = await fetch(`/api/requests/${params.id}`).then((r) => r.json());
+        setRequest(updated);
+      } else {
+        toast.error(data.error || "Failed to approve");
+      }
+    } catch {
+      toast.error("Network error — please try again");
+    } finally {
+      setApproving(false);
     }
-    setApproving(false);
   };
 
   const handleDownloadPdf = async () => {
@@ -160,8 +165,8 @@ export default function ViewRequestPage() {
     : 0;
   const totalWeight = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
 
-  const canApprove = (session?.user?.role === "accountant" || session?.user?.role === "admin")
-    && request.status === "pending";
+  const role = session?.user?.role;
+  const canApprove = (role === "accountant" || role === "admin") && request.status === "pending";
 
   const sigMap = Object.fromEntries(request.signatures.map((s) => [s.signature_type, s]));
   const displayDate = request.request_date

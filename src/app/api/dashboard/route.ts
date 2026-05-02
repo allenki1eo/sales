@@ -10,10 +10,12 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month") || new Date().toISOString().slice(0, 7);
+    const year  = month.slice(0, 4);
 
     const [
       pending, approved, customers, products,
       totalRevenue, monthlyRevenue, monthlyCartons,
+      yearlyRevenue, yearlyCartons,
       trend, topProducts, topCustomers, recent,
       exportVsLocal, topRoutes,
     ] = await Promise.all([
@@ -44,6 +46,24 @@ export async function GET(req: NextRequest) {
               WHERE r.status IN ('approved','dispatched')
               AND strftime('%Y-%m', r.created_at) = ?`,
         args: [month],
+      }),
+
+      db.execute({
+        sql: `SELECT COALESCE(SUM(ri.total_price), 0) as total
+              FROM request_items ri
+              JOIN requests r ON ri.request_id = r.id
+              WHERE r.status IN ('approved','dispatched')
+              AND strftime('%Y', r.created_at) = ?`,
+        args: [year],
+      }),
+
+      db.execute({
+        sql: `SELECT COALESCE(SUM(ri.quantity), 0) as total
+              FROM request_items ri
+              JOIN requests r ON ri.request_id = r.id
+              WHERE r.status IN ('approved','dispatched')
+              AND strftime('%Y', r.created_at) = ?`,
+        args: [year],
       }),
 
       db.execute(`
@@ -122,6 +142,8 @@ export async function GET(req: NextRequest) {
         total_revenue:     Number(totalRevenue.rows[0].total) || 0,
         monthly_revenue:   Number(monthlyRevenue.rows[0].total) || 0,
         monthly_cartons:   Number(monthlyCartons.rows[0].total) || 0,
+        yearly_revenue:    Number(yearlyRevenue.rows[0].total) || 0,
+        yearly_cartons:    Number(yearlyCartons.rows[0].total) || 0,
       },
       trend:          trend.rows,
       topProducts:    topProducts.rows,

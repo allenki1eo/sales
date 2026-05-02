@@ -9,7 +9,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   const role = session.user.role;
   if (role !== "accountant" && role !== "admin") {
-    return NextResponse.json({ error: "Only accountants can approve requests" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have permission to approve requests" }, { status: 403 });
   }
 
   const now = new Date().toISOString();
