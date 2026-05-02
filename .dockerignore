@@ -1,6 +1,14 @@
 .git
 .next
 node_modules
+
+# local DB / schema files not needed in image
 *.sqlite
 *.sqlite.sql
+schema.sql
+
+# TS build cache
+tsconfig.tsbuildinfo
+
+# env files
 .env*
