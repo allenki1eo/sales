@@ -34,6 +34,8 @@ interface DashboardData {
     total_revenue: number;
     monthly_revenue: number;
     monthly_cartons: number;
+    yearly_revenue: number;
+    yearly_cartons: number;
   };
   trend: Array<{ month: string; revenue: number; cartons: number }>;
   topProducts: Array<{ product_id: number; product_name: string; total_revenue: number; total_cartons: number }>;
@@ -168,13 +170,20 @@ export default function DashboardPage() {
       </div>
 
       {/* Revenue stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Revenue (All Time)"
+          title="All-Time Revenue"
           value={formatCurrency(stats.total_revenue)}
           icon={TrendingUp}
           color="indigo"
           subtitle="All approved & dispatched"
+        />
+        <StatCard
+          title={`${selectedMonth.slice(0, 4)} Revenue`}
+          value={formatCurrency(stats.yearly_revenue)}
+          icon={TrendingUp}
+          color="purple"
+          subtitle={`${stats.yearly_cartons.toLocaleString()} cartons`}
         />
         <StatCard
           title="Monthly Revenue"
