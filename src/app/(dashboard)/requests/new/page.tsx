@@ -91,8 +91,9 @@ export default function NewRequestPage() {
   const isExport = selectedCustomer?.is_export;
   const subtotal = isExport ? grossTotal : grossTotal / 1.18;
   const vatAmount = isExport ? 0 : subtotal * 0.18;
+  const totalCartons = watchedItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
   const efdCharge = selectedCustomer?.charges_efd
-    ? watchedItems.reduce((sum, item) => sum + (item.quantity || 0) * (selectedCustomer.efd_profit_per_carton || 0), 0)
+    ? totalCartons * (selectedCustomer.efd_profit_per_carton || 0)
     : 0;
   const total = grossTotal + efdCharge;
 
@@ -330,7 +331,9 @@ export default function NewRequestPage() {
               )}
               {selectedCustomer?.charges_efd && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">EFD Charge</span>
+                  <span className="text-muted-foreground">
+                    EFD Charge ({formatCurrency(selectedCustomer.efd_profit_per_carton)}/ctn × {totalCartons.toLocaleString()} ctns)
+                  </span>
                   <span className="font-medium">{formatCurrency(efdCharge)}</span>
                 </div>
               )}

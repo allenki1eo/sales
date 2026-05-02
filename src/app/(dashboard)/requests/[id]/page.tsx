@@ -157,11 +157,12 @@ export default function ViewRequestPage() {
   const isExport   = request.is_export;
   const subtotal   = isExport ? grossTotal : grossTotal / 1.18;
   const vatAmount  = isExport ? 0 : subtotal * (request.vat_percentage / 100);
-  const efdCharge  = request.charges_efd
-    ? request.items.reduce((s, i) => s + i.quantity * request.efd_profit_per_carton, 0)
+  const totalCartons = request.items.reduce((s, i) => s + i.quantity, 0);
+  const efdCharge    = request.charges_efd
+    ? totalCartons * request.efd_profit_per_carton
     : 0;
-  const grandTotal = grossTotal + efdCharge;
-  const totalWeight = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
+  const grandTotal   = grossTotal + efdCharge;
+  const totalWeight  = request.items.reduce((s, i) => s + i.quantity * (i.carton_weight || 0), 0);
 
   const canApprove = (session?.user?.role === "accountant" || session?.user?.role === "admin")
     && request.status === "pending";
@@ -312,7 +313,9 @@ export default function ViewRequestPage() {
                 )}
                 {request.charges_efd && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">EFD Charge</span>
+                    <span className="text-muted-foreground">
+                      EFD Charge ({formatCurrency(request.efd_profit_per_carton)}/ctn × {totalCartons.toLocaleString()} ctns)
+                    </span>
                     <span>{formatCurrency(efdCharge)}</span>
                   </div>
                 )}
@@ -472,7 +475,9 @@ export default function ViewRequestPage() {
               )}
               {request.charges_efd && (
                 <tr>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>EFD Charge</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>
+                    EFD Charge ({Math.round(request.efd_profit_per_carton).toLocaleString()}/ctn × {totalCartons.toLocaleString()} ctns)
+                  </td>
                   <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>
                     {Math.round(efdCharge).toLocaleString()}
                   </td>
