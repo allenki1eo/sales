@@ -59,4 +59,11 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: "/login" },
   session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
   secret: process.env.NEXTAUTH_SECRET,
+  // Allow HTTP on local/internal network deployments (no HTTPS)
+  cookies: process.env.NEXTAUTH_URL?.startsWith("https://") ? undefined : {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
+    },
+  },
 };
