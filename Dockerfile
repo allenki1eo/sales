@@ -26,10 +26,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV TURSO_DATABASE_URL=http://placeholder
-ENV TURSO_AUTH_TOKEN=placeholder
-ENV NEXTAUTH_SECRET=placeholder
-ENV NEXTAUTH_URL=http://localhost:3000
+ENV TURSO_DATABASE_URL=libsql://saleseast-hanki.aws-ap-northeast-1.turso.io
+ENV TURSO_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Nzc3MTg3MDQsImlkIjoiMDE5ZGUzMDgtOTcwMS03OTQzLWE1OWItNjBjNmMxYjI0YjAxIiwicmlkIjoiOWY0ZmIxZGQtYjI3NS00YjZiLTk3MWQtYjZmYTE3ZWVlMTJhIn0.vH-NXXa2NGI8WvG2VfuX1Hv8akh636P1fQ_ovsSXmCnAxbGy6oe9dZlOVjZ-LljdJlRxtusET1LxqcmupQozAQ
+ENV NEXTAUTH_SECRET=75e37761c49482d0e916c2edb89f32d8f5a1ed9a6a56ac5bcfd8a15f7a25df35
+ENV NEXTAUTH_URL=http://192.168.1.123:3000
 
 RUN npm run build
 
