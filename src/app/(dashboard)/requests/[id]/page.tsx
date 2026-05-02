@@ -82,12 +82,35 @@ export default function ViewRequestPage() {
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
 
-      const canvas = await html2canvas(docRef.current, {
+      const el = docRef.current;
+      const parent = el.parentElement;
+
+      // Temporarily show the hidden print element so html2canvas can capture it
+      const originalDisplay = parent ? parent.style.display : "";
+      const originalVisibility = parent ? parent.style.visibility : "";
+      if (parent) {
+        parent.classList.remove("hidden", "print-only");
+        parent.style.display = "block";
+        parent.style.visibility = "visible";
+      }
+      el.style.display = "block";
+      el.style.visibility = "visible";
+
+      const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
       });
+
+      // Restore hidden state
+      if (parent) {
+        parent.style.display = originalDisplay;
+        parent.style.visibility = originalVisibility;
+        parent.classList.add("hidden", "print-only");
+      }
+      el.style.display = "";
+      el.style.visibility = "";
 
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -100,7 +123,6 @@ export default function ViewRequestPage() {
       if (imgH <= pageH - margin * 2) {
         pdf.addImage(imgData, "PNG", margin, margin, imgW, imgH);
       } else {
-        // Multi-page: slice canvas into A4-height chunks
         const sliceH = Math.floor((canvas.width * (pageH - margin * 2)) / imgW);
         let yOffset = 0;
         let page = 0;
@@ -358,7 +380,7 @@ export default function ViewRequestPage() {
         )}
       </div>
 
-      {/* ── PRINT / PDF DOCUMENT ── hidden on screen, shown when printing ── */}
+            {/* ── PRINT / PDF DOCUMENT ── hidden on screen, shown when printing ── */}
       <div className="hidden print-only">
         <div
           ref={docRef}
@@ -367,15 +389,15 @@ export default function ViewRequestPage() {
             color: "#000",
             fontSize: "10pt",
             background: "#fff",
-            padding: "20px 24px",
-            maxWidth: "700px",
+            padding: "16px 20px",
+            maxWidth: "720px",
             margin: "0 auto",
             border: "1px solid #000",
           }}
         >
           {/* ── Company Header ── */}
-          <div style={{ textAlign: "center", marginBottom: "8px" }}>
-            <div style={{ fontSize: "14pt", fontWeight: "bold", letterSpacing: "0.5px" }}>
+          <div style={{ textAlign: "center", marginBottom: "6px" }}>
+            <div style={{ fontSize: "15pt", fontWeight: "bold", letterSpacing: "0.5px" }}>
               EAST AFRICAN SPIRIT (T) LTD.
             </div>
             <div style={{ fontSize: "9pt", marginTop: "2px" }}>P.O.BOX 707 SHINYANGA</div>
@@ -390,7 +412,7 @@ export default function ViewRequestPage() {
                 <td style={{ width: "50%", padding: "2px 4px" }}>
                   <span style={{ fontWeight: "bold" }}>Customer: </span>{request.customer_name}
                 </td>
-                <td style={{ width: "50%", padding: "2px 4px" }}>
+                <td style={{ width: "50%", padding: "2px 4px", textAlign: "right" }}>
                   <span style={{ fontWeight: "bold" }}>Date: </span>{displayDate}
                 </td>
               </tr>
@@ -398,7 +420,7 @@ export default function ViewRequestPage() {
                 <td style={{ padding: "2px 4px" }}>
                   <span style={{ fontWeight: "bold" }}>Truck No: </span>{request.truck_number || "—"}
                 </td>
-                <td style={{ padding: "2px 4px" }}>
+                <td style={{ padding: "2px 4px", textAlign: "right" }}>
                   <span style={{ fontWeight: "bold" }}>Route: </span>{request.route || "—"}
                 </td>
               </tr>
@@ -406,8 +428,8 @@ export default function ViewRequestPage() {
                 <td style={{ padding: "2px 4px" }}>
                   <span style={{ fontWeight: "bold" }}>Driver: </span>{request.driver_name || "—"}
                 </td>
-                <td style={{ padding: "2px 4px" }}>
-                  <span style={{ fontWeight: "bold" }}>Ref: </span>{refNo}
+                <td style={{ padding: "2px 4px", textAlign: "right" }}>
+                  <span style={{ fontWeight: "bold" }}>Ref: </span>#{request.id}
                 </td>
               </tr>
             </tbody>
@@ -418,76 +440,75 @@ export default function ViewRequestPage() {
             Request Note for Cartons
           </div>
 
-          {/* ── Products Table ── */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "8px" }}>
+          {/* ── Products Table (with embedded totals) ── */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "10px" }}>
             <thead>
-              <tr style={{ backgroundColor: "#f5f5f5" }}>
-                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center", width: "32px" }}>S/N</th>
-                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "left" }}>PRODUCT NAME</th>
-                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center", width: "50px" }}>QTY</th>
-                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "right", width: "110px" }}>PRICE@</th>
-                <th style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "right", width: "120px" }}>TOTAL</th>
+              <tr style={{ backgroundColor: "#f0f0f0" }}>
+                <th style={{ border: "1px solid #000", padding: "4px 5px", textAlign: "center", width: "30px" }}>S/N</th>
+                <th style={{ border: "1px solid #000", padding: "4px 5px", textAlign: "left" }}>Product Name</th>
+                <th style={{ border: "1px solid #000", padding: "4px 5px", textAlign: "center", width: "50px" }}>Qty</th>
+                <th style={{ border: "1px solid #000", padding: "4px 5px", textAlign: "right", width: "100px" }}>Price@</th>
+                <th style={{ border: "1px solid #000", padding: "4px 5px", textAlign: "right", width: "110px" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {request.items.map((item, i) => (
                 <tr key={i}>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "center" }}>{i + 1}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>{item.product_name}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "center" }}>{item.quantity.toLocaleString()}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>{Number(item.unit_price).toLocaleString()}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>{Number(item.total_price).toLocaleString()}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "center" }}>{i + 1}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>{item.product_name}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "center" }}>{item.quantity.toLocaleString()}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right" }}>{Number(item.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right" }}>{Number(item.total_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 </tr>
               ))}
-              {/* Empty rows to pad the table */}
-              {request.items.length < 6 && Array.from({ length: 6 - request.items.length }).map((_, i) => (
+              {/* Empty rows */}
+              {Array.from({ length: Math.max(1, 6 - request.items.length) }).map((_, i) => (
                 <tr key={`empty-${i}`}>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-
-          {/* ── Totals ── */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5pt", marginBottom: "12px" }}>
-            <tbody>
+              {/* Totals */}
               <tr>
-                <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", width: "70%" }}>
-                  SUBTOTAL (Excl. VAT)
+                <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#f9f9f9" }}>
+                  SUBTOTAL
                 </td>
-                <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", width: "30%", fontWeight: "bold" }}>
+                <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#f9f9f9" }}>
                   {Math.round(subtotal).toLocaleString()}
                 </td>
               </tr>
               {!request.is_export && (
                 <tr>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>
+                  <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#f9f9f9" }}>
                     VAT ({request.vat_percentage}%)
                   </td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#f9f9f9" }}>
                     {Math.round(vatAmount).toLocaleString()}
                   </td>
                 </tr>
               )}
               {request.charges_efd && (
                 <tr>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right" }}>
-                    EFD Charge ({Math.round(request.efd_profit_per_carton).toLocaleString()}/ctn × {totalCartons.toLocaleString()} ctns)
+                  <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px" }}>&nbsp;</td>
+                  <td colSpan={2} style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#fffbea", fontSize: "8.5pt" }}>
+                    EFD CHARGE<br/>({Math.round(request.efd_profit_per_carton).toLocaleString()}/ctn × {totalCartons.toLocaleString()} ctns)
                   </td>
-                  <td style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>
+                  <td style={{ border: "1px solid #ccc", padding: "4px 5px", textAlign: "right", fontWeight: "bold", backgroundColor: "#fffbea" }}>
                     {Math.round(efdCharge).toLocaleString()}
                   </td>
                 </tr>
               )}
-              <tr style={{ backgroundColor: "#f5f5f5" }}>
-                <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
-                  GRAND TOTAL {request.is_export ? "" : "(Incl. VAT)"}
+              <tr style={{ backgroundColor: "#f0f0f0" }}>
+                <td colSpan={2} style={{ border: "1px solid #000", padding: "5px 5px" }}>&nbsp;</td>
+                <td colSpan={2} style={{ border: "1px solid #000", padding: "5px 5px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
+                  GRAND TOTAL {request.is_export ? "" : "(Incl. EFD)"}
                 </td>
-                <td style={{ border: "1px solid #000", padding: "5px 6px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
+                <td style={{ border: "1px solid #000", padding: "5px 5px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>
                   {Math.round(grandTotal).toLocaleString()}
                 </td>
               </tr>
@@ -497,12 +518,12 @@ export default function ViewRequestPage() {
           {/* ── Weight Table ── */}
           {totalWeight > 0 && (
             <>
-              <div style={{ fontSize: "9pt", fontWeight: "bold", marginBottom: "4px", textTransform: "uppercase" }}>
-                Weight Summary
+              <div style={{ textAlign: "center", fontSize: "9pt", fontWeight: "bold", marginBottom: "4px", textTransform: "uppercase", border: "1px solid #000", padding: "3px" }}>
+                Cartons' Total Weight (KGS)
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9pt", marginBottom: "14px" }}>
                 <thead>
-                  <tr style={{ backgroundColor: "#f5f5f5" }}>
+                  <tr style={{ backgroundColor: "#f0f0f0" }}>
                     <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "left" }}>Product</th>
                     <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center", width: "50px" }}>Qty</th>
                     <th style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center", width: "80px" }}>Wt/Ctn (kg)</th>
@@ -516,16 +537,16 @@ export default function ViewRequestPage() {
                       <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center" }}>{item.quantity}</td>
                       <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "center" }}>{item.carton_weight}</td>
                       <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right" }}>
-                        {(item.quantity * item.carton_weight).toFixed(1)}
+                        {(item.quantity * item.carton_weight).toFixed(2)}
                       </td>
                     </tr>
                   ))}
-                  <tr style={{ backgroundColor: "#f5f5f5" }}>
+                  <tr style={{ backgroundColor: "#f0f0f0" }}>
                     <td colSpan={3} style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right", fontWeight: "bold" }}>
-                      TOTAL WEIGHT
+                      TOTAL WEIGHT:
                     </td>
                     <td style={{ border: "1px solid #ccc", padding: "3px 6px", textAlign: "right", fontWeight: "bold" }}>
-                      {totalWeight.toFixed(1)} kg
+                      {totalWeight.toFixed(2)} kg
                     </td>
                   </tr>
                 </tbody>
@@ -534,19 +555,15 @@ export default function ViewRequestPage() {
           )}
 
           {/* ── Signatures ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginTop: "10px" }}>
+          <div style={{ marginTop: "16px" }}>
             {ALL_SIG_TYPES.map((type) => {
               const sig = sigMap[type];
-              const showName = type !== "approved_by";
               return (
-                <div key={type} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "8pt", textTransform: "uppercase", marginBottom: "28px" }}>
-                    {sigTypeLabel[type]}
-                  </div>
-                  <div style={{ borderBottom: "1px solid #000", marginBottom: "3px" }} />
-                  <div style={{ fontSize: "8pt" }}>
-                    {showName && sig ? sig.user_name : " "}
-                  </div>
+                <div key={type} style={{ marginBottom: "10px", display: "flex", alignItems: "baseline" }}>
+                  <span style={{ fontSize: "9pt", fontWeight: "bold", width: "100px", flexShrink: 0 }}>
+                    {sigTypeLabel[type]}:
+                  </span>
+                  <span style={{ flex: 1, borderBottom: "1px dotted #000", marginLeft: "4px", marginRight: "4px", minHeight: "14px" }} />
                 </div>
               );
             })}
