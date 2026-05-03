@@ -5,12 +5,11 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   Search, FilePlus, Eye, Pencil, Trash2, ChevronLeft,
-  ChevronRight, Filter, FileText,
+  ChevronRight, Filter, FileText, CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -25,52 +24,51 @@ interface RequestRow {
   user_name: string;
 }
 
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  approved: "default",
-  dispatched: "secondary",
-  rejected: "destructive",
-};
-
 const statusColors: Record<string, string> = {
-  pending: "text-amber-700 bg-amber-50 border-amber-200",
-  approved: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  pending:    "text-amber-700 bg-amber-50 border-amber-200",
+  approved:   "text-emerald-700 bg-emerald-50 border-emerald-200",
   dispatched: "text-blue-700 bg-blue-50 border-blue-200",
-  rejected: "text-red-700 bg-red-50 border-red-200",
+  rejected:   "text-red-700 bg-red-50 border-red-200",
 };
 
 export default function RequestsPage() {
   const { data: session } = useSession();
-  const [requests, setRequests] = useState<RequestRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [requests, setRequests]     = useState<RequestRow[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [page, setPage]             = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch] = useState("");
+  const [search, setSearch]         = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [deleteId, setDeleteId]     = useState<number | null>(null);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  const role = session?.user?.role;
+  const canApprove = role === "admin" || role === "accountant";
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        page: String(page),
-        limit: "10",
-        search,
+        page: String(page), limit: "10", search,
         ...(statusFilter !== "all" && { status: statusFilter }),
       });
-      const res = await fetch(`/api/requests?${params}`);
+      const [res, pendingRes] = await Promise.all([
+        fetch(`/api/requests?${params}`),
+        fetch("/api/requests?limit=1&status=pending"),
+      ]);
       const data = await res.json();
+      const pendingData = await pendingRes.json();
       if (!res.ok) {
         toast.error(data.error || "Failed to load requests");
-        setRequests([]);
-        setTotal(0);
-        setTotalPages(1);
+        setRequests([]); setTotal(0); setTotalPages(1);
         return;
       }
       setRequests(data.data || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
+      setPendingCount(pendingData.total || 0);
     } finally {
       setLoading(false);
     }
@@ -78,15 +76,29 @@ export default function RequestsPage() {
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
+  const handleApprove = async (id: number) => {
+    setApprovingId(id);
+    try {
+      const res = await fetch(`/api/requests/${id}/sign`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Request #${id} approved`);
+        fetchRequests();
+      } else {
+        toast.error(data.error || "Failed to approve");
+      }
+    } catch {
+      toast.error("Network error — please try again");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
     const res = await fetch(`/api/requests/${deleteId}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Request deleted");
-      fetchRequests();
-    } else {
-      toast.error("Failed to delete request");
-    }
+    if (res.ok) { toast.success("Request deleted"); fetchRequests(); }
+    else toast.error("Failed to delete request");
     setDeleteId(null);
   };
 
@@ -104,6 +116,29 @@ export default function RequestsPage() {
           </Link>
         </Button>
       </div>
+
+      {/* Pending quick-filter banner — only for approvers */}
+      {canApprove && pendingCount > 0 && (
+        <button
+          onClick={() => { setStatusFilter("pending"); setPage(1); }}
+          className="w-full flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-white">
+              <CheckCircle className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {pendingCount} request{pendingCount !== 1 ? "s" : ""} awaiting approval
+              </p>
+              <p className="text-xs text-amber-700">Click to filter pending requests</p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-amber-700 bg-amber-200 px-2 py-1 rounded-full">
+            {pendingCount}
+          </span>
+        </button>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -185,17 +220,27 @@ export default function RequestsPage() {
                         <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(r.created_at)}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
+                            {canApprove && r.status === "pending" && (
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                onClick={() => handleApprove(r.id)}
+                                disabled={approvingId === r.id}
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                {approvingId === r.id ? "…" : "Approve"}
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                               <Link href={`/requests/${r.id}`}><Eye className="h-3.5 w-3.5" /></Link>
                             </Button>
-                            {session?.user?.role === "admin" && (
+                            {role === "admin" && (
                               <>
                                 <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                                   <Link href={`/requests/${r.id}/edit`}><Pencil className="h-3.5 w-3.5" /></Link>
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
+                                  variant="ghost" size="icon"
                                   className="h-8 w-8 text-destructive hover:text-destructive"
                                   onClick={() => setDeleteId(r.id)}
                                 >
@@ -224,23 +269,33 @@ export default function RequestsPage() {
                         {r.status}
                       </span>
                     </div>
-                    <div className="text-xs text-muted-foreground flex gap-4">
+                    <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
                       <span>{r.route}</span>
                       <span>{r.truck_number}</span>
                       <span>{formatDate(r.created_at)}</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {canApprove && r.status === "pending" && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => handleApprove(r.id)}
+                          disabled={approvingId === r.id}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {approvingId === r.id ? "Approving…" : "Approve"}
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" asChild className="h-7 text-xs">
                         <Link href={`/requests/${r.id}`}><Eye className="h-3 w-3 mr-1" />View</Link>
                       </Button>
-                      {session?.user?.role === "admin" && (
+                      {role === "admin" && (
                         <>
                           <Button variant="outline" size="sm" asChild className="h-7 text-xs">
                             <Link href={`/requests/${r.id}/edit`}><Pencil className="h-3 w-3 mr-1" />Edit</Link>
                           </Button>
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="outline" size="sm"
                             className="h-7 text-xs text-destructive hover:text-destructive"
                             onClick={() => setDeleteId(r.id)}
                           >
@@ -256,24 +311,12 @@ export default function RequestsPage() {
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Page {page} of {totalPages}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page <= 1}
-                      onClick={() => setPage(page - 1)}
-                    >
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= totalPages}
-                      onClick={() => setPage(page + 1)}
-                    >
+                    <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
