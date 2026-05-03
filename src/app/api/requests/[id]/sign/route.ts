@@ -14,18 +14,23 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   const now = new Date().toISOString();
 
-  await db.batch([
-    {
-      sql: `INSERT INTO request_signatures (request_id, signer_id, signature_type, signed_at)
-            VALUES (?, ?, 'approved_by', ?)
-            ON CONFLICT (request_id, signature_type) DO UPDATE SET signer_id = excluded.signer_id, signed_at = excluded.signed_at`,
-      args: [params.id, session.user.id, now],
-    },
-    {
-      sql: "UPDATE requests SET status = 'approved' WHERE id = ?",
-      args: [params.id],
-    },
-  ], "write");
+  try {
+    await db.batch([
+      {
+        sql: `INSERT INTO request_signatures (request_id, signer_id, signature_type, signed_at)
+              VALUES (?, ?, 'approved_by', ?)
+              ON CONFLICT (request_id, signature_type) DO UPDATE SET signer_id = excluded.signer_id, signed_at = excluded.signed_at`,
+        args: [params.id, session.user.id, now],
+      },
+      {
+        sql: "UPDATE requests SET status = 'approved' WHERE id = ?",
+        args: [params.id],
+      },
+    ], "write");
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[API /requests/:id/sign POST]", err);
+    return NextResponse.json({ error: err.message || "Failed to approve request" }, { status: 500 });
+  }
 }
