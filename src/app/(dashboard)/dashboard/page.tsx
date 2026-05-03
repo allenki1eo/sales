@@ -140,7 +140,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats row 1 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           title="Pending Requests"
           value={stats.pending_requests}
@@ -170,7 +170,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Revenue stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           title="All-Time Revenue"
           value={formatCurrency(stats.total_revenue)}
