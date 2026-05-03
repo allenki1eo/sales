@@ -17,9 +17,12 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   try {
     await db.batch([
       {
+        sql: `DELETE FROM request_signatures WHERE request_id = ? AND signature_type = 'approved_by'`,
+        args: [params.id],
+      },
+      {
         sql: `INSERT INTO request_signatures (request_id, signer_id, signature_type, signed_at)
-              VALUES (?, ?, 'approved_by', ?)
-              ON CONFLICT (request_id, signature_type) DO UPDATE SET signer_id = excluded.signer_id, signed_at = excluded.signed_at`,
+              VALUES (?, ?, 'approved_by', ?)`,
         args: [params.id, session.user.id, now],
       },
       {
