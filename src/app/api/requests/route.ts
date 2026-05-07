@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
     const limit  = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
+    const from   = searchParams.get("from") || "";
+    const to     = searchParams.get("to")   || "";
     const offset = (page - 1) * limit;
 
     let where = "WHERE 1=1";
@@ -25,6 +27,14 @@ export async function GET(req: NextRequest) {
     if (status) {
       where += " AND r.status = ?";
       args.push(status);
+    }
+    if (from) {
+      where += " AND date(r.created_at) >= ?";
+      args.push(from);
+    }
+    if (to) {
+      where += " AND date(r.created_at) <= ?";
+      args.push(to);
     }
 
     const countResult = await db.execute({

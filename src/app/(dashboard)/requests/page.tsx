@@ -3,14 +3,17 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import type { DateRange } from "react-day-picker";
 import {
   Search, FilePlus, Eye, Pencil, Trash2, ChevronLeft,
-  ChevronRight, Filter, FileText, CheckCircle,
+  ChevronRight, Filter, FileText, CheckCircle, CalendarIcon, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -31,20 +34,30 @@ const statusColors: Record<string, string> = {
   rejected:   "text-red-700 bg-red-50 border-red-200",
 };
 
+function fmtDate(d: Date) {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function toISO(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
 export default function RequestsPage() {
   const { data: session } = useSession();
-  const [requests, setRequests]     = useState<RequestRow[]>([]);
-  const [total, setTotal]           = useState(0);
+  const [requests, setRequests]         = useState<RequestRow[]>([]);
+  const [total, setTotal]               = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
-  const [page, setPage]             = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch]         = useState("");
+  const [page, setPage]                 = useState(1);
+  const [totalPages, setTotalPages]     = useState(1);
+  const [search, setSearch]             = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [loading, setLoading]       = useState(true);
-  const [deleteId, setDeleteId]     = useState<number | null>(null);
-  const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [dateRange, setDateRange]       = useState<DateRange | undefined>();
+  const [calOpen, setCalOpen]           = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [deleteId, setDeleteId]         = useState<number | null>(null);
+  const [approvingId, setApprovingId]   = useState<number | null>(null);
 
-  const role = session?.user?.role;
+  const role       = session?.user?.role;
   const canApprove = role === "admin" || role === "accountant";
 
   const fetchRequests = useCallback(async () => {
@@ -53,12 +66,14 @@ export default function RequestsPage() {
       const params = new URLSearchParams({
         page: String(page), limit: "10", search,
         ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(dateRange?.from && { from: toISO(dateRange.from) }),
+        ...(dateRange?.to   && { to:   toISO(dateRange.to)   }),
       });
       const [res, pendingRes] = await Promise.all([
         fetch(`/api/requests?${params}`),
         fetch("/api/requests?limit=1&status=pending"),
       ]);
-      const data = await res.json();
+      const data        = await res.json();
       const pendingData = await pendingRes.json();
       if (!res.ok) {
         toast.error(data.error || "Failed to load requests");
@@ -72,21 +87,19 @@ export default function RequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, dateRange]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  const clearDateRange = () => { setDateRange(undefined); setPage(1); };
 
   const handleApprove = async (id: number) => {
     setApprovingId(id);
     try {
-      const res = await fetch(`/api/requests/${id}/sign`, { method: "POST" });
+      const res  = await fetch(`/api/requests/${id}/sign`, { method: "POST" });
       const data = await res.json();
-      if (res.ok) {
-        toast.success(`Request #${id} approved`);
-        fetchRequests();
-      } else {
-        toast.error(data.error || "Failed to approve");
-      }
+      if (res.ok) { toast.success(`Request #${id} approved`); fetchRequests(); }
+      else toast.error(data.error || "Failed to approve");
     } catch {
       toast.error("Network error — please try again");
     } finally {
@@ -101,6 +114,12 @@ export default function RequestsPage() {
     else toast.error("Failed to delete request");
     setDeleteId(null);
   };
+
+  const dateLabel = dateRange?.from
+    ? dateRange.to
+      ? `${fmtDate(dateRange.from)} – ${fmtDate(dateRange.to)}`
+      : fmtDate(dateRange.from)
+    : null;
 
   return (
     <div className="space-y-5">
@@ -117,7 +136,7 @@ export default function RequestsPage() {
         </Button>
       </div>
 
-      {/* Pending quick-filter banner — only for approvers */}
+      {/* Pending banner */}
       {canApprove && pendingCount > 0 && (
         <button
           onClick={() => { setStatusFilter("pending"); setPage(1); }}
@@ -142,31 +161,83 @@ export default function RequestsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by customer, route, truck..."
-                className="pl-9"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              />
+          <div className="flex flex-col gap-3">
+            {/* Row 1: search + status */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by customer, route, truck..."
+                  className="pl-9"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                <SelectTrigger className="w-40">
+                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="dispatched">Dispatched</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-40">
-                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="dispatched">Dispatched</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+
+            {/* Row 2: date range picker */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Popover open={calOpen} onOpenChange={setCalOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`justify-start text-left font-normal h-9 ${!dateLabel ? "text-muted-foreground" : ""}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {dateLabel ?? "Filter by date range"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={(range) => {
+                      setDateRange(range);
+                      setPage(1);
+                      if (range?.from && range?.to) setCalOpen(false);
+                    }}
+                    numberOfMonths={2}
+                    disabled={{ after: new Date() }}
+                    initialFocus
+                  />
+                  <div className="border-t p-3 flex justify-between items-center gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {dateRange?.from && !dateRange?.to ? "Select end date" : "Select a date range"}
+                    </p>
+                    <Button variant="ghost" size="sm" onClick={() => { clearDateRange(); setCalOpen(false); }}>
+                      Clear
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Active date badge */}
+              {dateLabel && (
+                <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded-full">
+                  <CalendarIcon className="h-3 w-3" />
+                  {dateLabel}
+                  <button onClick={clearDateRange} className="ml-0.5 hover:text-indigo-900">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
           </div>
         </CardHeader>
+
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -179,7 +250,9 @@ export default function RequestsPage() {
               <FileText className="h-10 w-10 mb-3 opacity-30" />
               <p className="font-medium">No requests found</p>
               <p className="text-sm mt-1">
-                {search || statusFilter !== "all" ? "Try different filters" : "Create your first request"}
+                {search || statusFilter !== "all" || dateLabel
+                  ? "Try different filters"
+                  : "Create your first request"}
               </p>
             </div>
           ) : (
