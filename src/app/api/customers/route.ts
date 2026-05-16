@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import db from "@/lib/db";
+import { sendImsEvent } from "@/lib/ims-webhook";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -60,5 +61,21 @@ export async function POST(req: NextRequest) {
     args: [name, location, phone || "", is_export ? 1 : 0, charges_efd ? 1 : 0, efd_profit_per_carton || 0],
   });
 
-  return NextResponse.json({ id: Number(result.lastInsertRowid) }, { status: 201 });
+  const id = Number(result.lastInsertRowid);
+
+  void sendImsEvent("customer.created", {
+    id: String(id),
+    code: `CUST-${String(id).padStart(3, "0")}`,
+    name,
+    email: null,
+    phone: phone || null,
+    address: location || null,
+    contactPerson: null,
+    creditLimit: 0,
+    currency: "TZS",
+    status: "ACTIVE",
+    notes: null,
+  });
+
+  return NextResponse.json({ id }, { status: 201 });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import db from "@/lib/db";
+import { sendImsEvent } from "@/lib/ims-webhook";
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -29,6 +30,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     sql: `UPDATE customers SET name=?, location=?, phone=?, is_export=?, charges_efd=?, efd_profit_per_carton=?
           WHERE id = ?`,
     args: [name, location, phone || "", is_export ? 1 : 0, charges_efd ? 1 : 0, efd_profit_per_carton || 0, params.id],
+  });
+
+  void sendImsEvent("customer.updated", {
+    id: String(params.id),
+    code: `CUST-${String(params.id).padStart(3, "0")}`,
+    name,
+    email: null,
+    phone: phone || null,
+    address: location || null,
+    contactPerson: null,
+    creditLimit: 0,
+    currency: "TZS",
+    status: "ACTIVE",
+    notes: null,
   });
 
   return NextResponse.json({ success: true });
