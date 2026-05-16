@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import db from "@/lib/db";
+import { sendOrderEvent, sendKpiUpdate } from "@/lib/ims-webhook";
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -86,6 +87,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   await db.batch(stmts, "write");
+
+  const month = new Date().toISOString().slice(0, 7);
+  if (status === "rejected") {
+    void sendOrderEvent("order.cancelled", params.id);
+  } else {
+    void sendOrderEvent("order.updated", params.id);
+  }
+  void sendKpiUpdate(month);
+
   return NextResponse.json({ success: true });
 }
 
