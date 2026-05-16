@@ -19,11 +19,11 @@ export async function GET() {
     const sig =
       "sha256=" + crypto.createHmac("sha256", secret!).update(body).digest("hex");
 
-    const res = await fetch(`${baseUrl}/api/ping`, {
+    const res = await fetch(`${baseUrl}/api/webhooks/sales`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Signature": sig,
+        "x-sales-signature": sig,
       },
       body,
       signal: AbortSignal.timeout(5000),
