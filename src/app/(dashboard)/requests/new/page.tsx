@@ -244,7 +244,13 @@ export default function NewRequestPage() {
                   <Calendar
                     mode="single"
                     selected={watchedDate ? new Date(watchedDate + "T00:00:00") : undefined}
-                    onSelect={(d) => d && setValue("request_date", d.toISOString().slice(0, 10))}
+                    onSelect={(d) => {
+                      if (!d) return;
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, "0");
+                      const dd = String(d.getDate()).padStart(2, "0");
+                      setValue("request_date", `${yyyy}-${mm}-${dd}`);
+                    }}
                     initialFocus
                   />
                 </PopoverContent>
