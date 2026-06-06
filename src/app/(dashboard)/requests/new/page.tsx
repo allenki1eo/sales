@@ -7,15 +7,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Plus, Trash2, Loader2, Search, ChevronDown,
-  TruckIcon, User, MapPin, Package, Calculator,
+  TruckIcon, User, MapPin, Package, CalendarIcon,
 } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { formatCurrency } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Customer {
@@ -27,6 +30,7 @@ interface CustomerPrice { product_id: number; product_name: string; price: numbe
 
 const schema = z.object({
   customer_id: z.string().min(1, "Customer is required"),
+  request_date: z.string().min(1, "Request date is required"),
   truck_number: z.string().min(1, "Truck number is required"),
   driver_name: z.string().min(1, "Driver name is required"),
   route: z.string().min(1, "Route is required"),
@@ -49,10 +53,16 @@ export default function NewRequestPage() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const today = new Date();
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { items: [{ product_id: "", quantity: 1, unit_price: 0 }] },
+    defaultValues: {
+      request_date: today.toISOString().slice(0, 10),
+      items: [{ product_id: "", quantity: 1, unit_price: 0 }],
+    },
   });
+
+  const watchedDate = watch("request_date");
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
   const watchedItems = watch("items");
@@ -105,6 +115,7 @@ export default function NewRequestPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer_id: parseInt(data.customer_id),
+          request_date: data.request_date,
           truck_number: data.truck_number,
           driver_name: data.driver_name,
           route: data.route,
@@ -216,7 +227,30 @@ export default function NewRequestPage() {
               Delivery Details
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <Label>Request Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn("w-full justify-start text-left font-normal", !watchedDate && "text-muted-foreground")}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {watchedDate ? format(new Date(watchedDate + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={watchedDate ? new Date(watchedDate + "T00:00:00") : undefined}
+                    onSelect={(d) => d && setValue("request_date", d.toISOString().slice(0, 10))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              {errors.request_date && <p className="text-xs text-destructive">{errors.request_date.message}</p>}
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="truck_number">Truck Number</Label>
               <Input id="truck_number" placeholder="e.g. T123ABC" {...register("truck_number")} />

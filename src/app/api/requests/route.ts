@@ -77,13 +77,15 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { customer_id, truck_number, driver_name, route, items } = body;
+  const { customer_id, truck_number, driver_name, route, items, request_date } = body;
 
   if (!customer_id || !driver_name || !route || !items?.length) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = request_date && /^\d{4}-\d{2}-\d{2}$/.test(request_date)
+    ? request_date
+    : new Date().toISOString().slice(0, 10);
 
   const insertRequest = await db.execute({
     sql: `INSERT INTO requests (customer_id, user_id, truck_no, driver_name, route, request_date, vat_percent, status)
