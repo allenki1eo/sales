@@ -54,10 +54,11 @@ export default function NewRequestPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const today = new Date();
+  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      request_date: today.toISOString().slice(0, 10),
+      request_date: localToday,
       items: [{ product_id: "", quantity: 1, unit_price: 0 }],
     },
   });
