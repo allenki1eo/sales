@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 interface RouteData {
   route: string;
   cartons: number;
-  revenue: number;
+  revenue?: number;
   orders: number;
 }
 
@@ -25,7 +25,7 @@ export function TopRoutesChart({ data }: Props) {
     route:   truncate(d.route),
     fullRoute: d.route,
     cartons: Number(d.cartons),
-    revenue: Number(d.revenue),
+    revenue: Number(d.revenue ?? 0),
     orders:  Number(d.orders),
   }));
 

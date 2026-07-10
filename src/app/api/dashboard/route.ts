@@ -7,6 +7,10 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Only admins receive financial figures (revenue/values). Everyone else
+  // gets an operations-only payload with counts and carton volumes.
+  const isAdmin = session.user.role === "admin";
+
   try {
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month") || new Date().toISOString().slice(0, 7);
@@ -85,18 +89,19 @@ export async function GET(req: NextRequest) {
         LEFT JOIN request_items ri ON ri.product_id = p.id
         LEFT JOIN requests r ON ri.request_id = r.id AND r.status IN ('approved','dispatched')
         GROUP BY p.id, p.name
-        ORDER BY total_revenue DESC
+        ORDER BY ${isAdmin ? "total_revenue" : "total_cartons"} DESC
         LIMIT 5`),
 
       db.execute(`
         SELECT c.id as customer_id, c.name as customer_name,
                COALESCE(SUM(ri.total_price), 0) as total_revenue,
+               COALESCE(SUM(ri.quantity), 0) as total_cartons,
                COUNT(DISTINCT r.id) as total_orders
         FROM customers c
         LEFT JOIN requests r ON r.customer_id = c.id AND r.status IN ('approved','dispatched')
         LEFT JOIN request_items ri ON ri.request_id = r.id
         GROUP BY c.id, c.name
-        ORDER BY total_revenue DESC
+        ORDER BY ${isAdmin ? "total_revenue" : "total_orders"} DESC
         LIMIT 5`),
 
       db.execute(`
@@ -132,6 +137,46 @@ export async function GET(req: NextRequest) {
         ORDER BY cartons DESC
         LIMIT 8`),
     ]);
+
+    if (!isAdmin) {
+      // Operations-only payload: no revenue, prices, or margin figures.
+      return NextResponse.json({
+        stats: {
+          pending_requests:  Number(pending.rows[0].count) || 0,
+          approved_requests: Number(approved.rows[0].count) || 0,
+          total_customers:   Number(customers.rows[0].count) || 0,
+          total_products:    Number(products.rows[0].count) || 0,
+          monthly_cartons:   Number(monthlyCartons.rows[0].total) || 0,
+          yearly_cartons:    Number(yearlyCartons.rows[0].total) || 0,
+        },
+        trend: trend.rows.map((r) => ({
+          month:   r.month,
+          cartons: Number(r.cartons) || 0,
+        })),
+        topProducts: topProducts.rows.map((r) => ({
+          product_id:    r.product_id,
+          product_name:  r.product_name,
+          total_cartons: Number(r.total_cartons) || 0,
+        })),
+        topCustomers: topCustomers.rows.map((r) => ({
+          customer_id:   r.customer_id,
+          customer_name: r.customer_name,
+          total_cartons: Number(r.total_cartons) || 0,
+          total_orders:  Number(r.total_orders) || 0,
+        })),
+        recentRequests: recent.rows,
+        exportVsLocal: exportVsLocal.rows.map((r) => ({
+          is_export: r.is_export,
+          cartons:   Number(r.cartons) || 0,
+          orders:    Number(r.orders) || 0,
+        })),
+        topRoutes: topRoutes.rows.map((r) => ({
+          route:   r.route,
+          cartons: Number(r.cartons) || 0,
+          orders:  Number(r.orders) || 0,
+        })),
+      });
+    }
 
     return NextResponse.json({
       stats: {
