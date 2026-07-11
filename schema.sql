@@ -81,6 +81,48 @@ CREATE TABLE IF NOT EXISTS request_signatures (
   signed_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Credit notes (reduce what a customer owes: returns, damages, overcharges)
+-- NOTE: also created automatically at runtime by src/lib/finance-schema.ts
+CREATE TABLE IF NOT EXISTS credit_notes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  credit_note_no TEXT    NOT NULL UNIQUE,
+  customer_id    INTEGER NOT NULL REFERENCES customers(id),
+  request_id     INTEGER REFERENCES requests(id),
+  user_id        INTEGER NOT NULL REFERENCES users(id),
+  reason         TEXT    NOT NULL,
+  status         TEXT    NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending','approved','rejected')),
+  credit_date    TEXT    NOT NULL,
+  approved_by    INTEGER REFERENCES users(id),
+  approved_at    TEXT,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS credit_note_items (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  credit_note_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
+  product_id     INTEGER REFERENCES products(id),
+  description    TEXT,
+  quantity       INTEGER NOT NULL DEFAULT 1,
+  unit_price     NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total_price    NUMERIC(12,2) NOT NULL
+);
+
+-- Customer payments received
+-- NOTE: also created automatically at runtime by src/lib/finance-schema.ts
+CREATE TABLE IF NOT EXISTS payments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id  INTEGER NOT NULL REFERENCES customers(id),
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  amount       NUMERIC(12,2) NOT NULL,
+  payment_date TEXT    NOT NULL,
+  method       TEXT    NOT NULL DEFAULT 'cash'
+                 CHECK (method IN ('cash','bank','mobile_money','cheque','other')),
+  reference    TEXT,
+  notes        TEXT,
+  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ────────────────────────────────────────────────────────────
 -- Seed data  (password = "password" — bcrypt hash)
 -- ────────────────────────────────────────────────────────────

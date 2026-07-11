@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard, FilePlus, FileText, Users,
   Package, ShieldCheck, LogOut, Wine, X,
+  FileMinus2, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,8 @@ const navItems = [
   { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
   { href: "/requests/new", label: "New Request",  icon: FilePlus },
   { href: "/requests",     label: "All Requests", icon: FileText },
+  { href: "/credit-notes", label: "Credit Notes", icon: FileMinus2 },
+  { href: "/payments",     label: "Payments",     icon: Wallet },
   { href: "/customers",    label: "Customers",    icon: Users },
   { href: "/products",     label: "Products",     icon: Package },
 ];
