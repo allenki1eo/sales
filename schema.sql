@@ -108,6 +108,11 @@ CREATE TABLE IF NOT EXISTS credit_note_items (
   total_price    NUMERIC(12,2) NOT NULL
 );
 
+-- Opening balance columns on customers (pre-system debt, settled first by FIFO)
+-- NOTE: added automatically at runtime by src/lib/finance-schema.ts
+-- ALTER TABLE customers ADD COLUMN opening_balance NUMERIC(14,2) NOT NULL DEFAULT 0;
+-- ALTER TABLE customers ADD COLUMN opening_balance_date TEXT;
+
 -- Customer payments received
 -- NOTE: also created automatically at runtime by src/lib/finance-schema.ts
 CREATE TABLE IF NOT EXISTS payments (

@@ -4,54 +4,69 @@ import db from "@/lib/db";
 // created lazily so no manual migration is needed on the Turso database.
 let ensured: Promise<void> | null = null;
 
+async function createTables(): Promise<void> {
+  await db.batch(
+    [
+      `CREATE TABLE IF NOT EXISTS credit_notes (
+         id             INTEGER PRIMARY KEY AUTOINCREMENT,
+         credit_note_no TEXT    NOT NULL UNIQUE,
+         customer_id    INTEGER NOT NULL REFERENCES customers(id),
+         request_id     INTEGER REFERENCES requests(id),
+         user_id        INTEGER NOT NULL REFERENCES users(id),
+         reason         TEXT    NOT NULL,
+         status         TEXT    NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending','approved','rejected')),
+         credit_date    TEXT    NOT NULL,
+         approved_by    INTEGER REFERENCES users(id),
+         approved_at    TEXT,
+         created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`,
+      `CREATE TABLE IF NOT EXISTS credit_note_items (
+         id             INTEGER PRIMARY KEY AUTOINCREMENT,
+         credit_note_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
+         product_id     INTEGER REFERENCES products(id),
+         description    TEXT,
+         quantity       INTEGER NOT NULL DEFAULT 1,
+         unit_price     NUMERIC(12,2) NOT NULL DEFAULT 0,
+         total_price    NUMERIC(12,2) NOT NULL
+       )`,
+      `CREATE TABLE IF NOT EXISTS payments (
+         id           INTEGER PRIMARY KEY AUTOINCREMENT,
+         customer_id  INTEGER NOT NULL REFERENCES customers(id),
+         user_id      INTEGER NOT NULL REFERENCES users(id),
+         amount       NUMERIC(12,2) NOT NULL,
+         payment_date TEXT    NOT NULL,
+         method       TEXT    NOT NULL DEFAULT 'cash'
+                        CHECK (method IN ('cash','bank','mobile_money','cheque','other')),
+         reference    TEXT,
+         notes        TEXT,
+         created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`,
+    ],
+    "write"
+  );
+
+  // Opening balance for debt that pre-dates the system; ALTER is idempotent
+  // via the duplicate-column check since SQLite has no ADD COLUMN IF NOT EXISTS.
+  const alters = [
+    "ALTER TABLE customers ADD COLUMN opening_balance NUMERIC(14,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE customers ADD COLUMN opening_balance_date TEXT",
+  ];
+  for (const sql of alters) {
+    try {
+      await db.execute(sql);
+    } catch (err: any) {
+      if (!/duplicate column/i.test(String(err?.message))) throw err;
+    }
+  }
+}
+
 export function ensureFinanceTables(): Promise<void> {
   if (!ensured) {
-    ensured = db
-      .batch(
-        [
-          `CREATE TABLE IF NOT EXISTS credit_notes (
-             id             INTEGER PRIMARY KEY AUTOINCREMENT,
-             credit_note_no TEXT    NOT NULL UNIQUE,
-             customer_id    INTEGER NOT NULL REFERENCES customers(id),
-             request_id     INTEGER REFERENCES requests(id),
-             user_id        INTEGER NOT NULL REFERENCES users(id),
-             reason         TEXT    NOT NULL,
-             status         TEXT    NOT NULL DEFAULT 'pending'
-                              CHECK (status IN ('pending','approved','rejected')),
-             credit_date    TEXT    NOT NULL,
-             approved_by    INTEGER REFERENCES users(id),
-             approved_at    TEXT,
-             created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-           )`,
-          `CREATE TABLE IF NOT EXISTS credit_note_items (
-             id             INTEGER PRIMARY KEY AUTOINCREMENT,
-             credit_note_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
-             product_id     INTEGER REFERENCES products(id),
-             description    TEXT,
-             quantity       INTEGER NOT NULL DEFAULT 1,
-             unit_price     NUMERIC(12,2) NOT NULL DEFAULT 0,
-             total_price    NUMERIC(12,2) NOT NULL
-           )`,
-          `CREATE TABLE IF NOT EXISTS payments (
-             id           INTEGER PRIMARY KEY AUTOINCREMENT,
-             customer_id  INTEGER NOT NULL REFERENCES customers(id),
-             user_id      INTEGER NOT NULL REFERENCES users(id),
-             amount       NUMERIC(12,2) NOT NULL,
-             payment_date TEXT    NOT NULL,
-             method       TEXT    NOT NULL DEFAULT 'cash'
-                            CHECK (method IN ('cash','bank','mobile_money','cheque','other')),
-             reference    TEXT,
-             notes        TEXT,
-             created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-           )`,
-        ],
-        "write"
-      )
-      .then(() => undefined)
-      .catch((err) => {
-        ensured = null; // allow retry on next request
-        throw err;
-      });
+    ensured = createTables().catch((err) => {
+      ensured = null; // allow retry on next request
+      throw err;
+    });
   }
   return ensured;
 }
@@ -69,3 +84,21 @@ export async function nextCreditNoteNumber(): Promise<string> {
   const seq = last ? parseInt(last.slice(prefix.length), 10) + 1 : 1;
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
+
+// Invoice value matches the request document: gross item total plus the EFD
+// charge for customers that carry it (prices are stored VAT-inclusive for
+// local customers, VAT-free for export customers).
+export const CUSTOMER_INVOICES_SQL = `
+  SELECT r.id,
+         COALESCE(r.request_date, date(r.created_at)) as doc_date,
+         COALESCE(SUM(ri.total_price), 0)
+           + CASE WHEN c.charges_efd = 1
+                  THEN COALESCE(SUM(ri.quantity), 0) * c.efd_profit_per_carton
+                  ELSE 0 END as amount,
+         COALESCE(SUM(ri.quantity), 0) as cartons,
+         r.truck_no, r.route
+  FROM requests r
+  JOIN customers c ON r.customer_id = c.id
+  LEFT JOIN request_items ri ON ri.request_id = r.id
+  WHERE r.customer_id = ? AND r.status IN ('approved','dispatched')
+  GROUP BY r.id`;

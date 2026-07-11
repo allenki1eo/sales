@@ -2,24 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import db from "@/lib/db";
-import { ensureFinanceTables } from "@/lib/finance-schema";
-
-// Invoice value matches the request document: gross item total plus the EFD
-// charge for customers that carry it (prices are stored VAT-inclusive for
-// local customers, VAT-free for export customers).
-const INVOICE_SQL = `
-  SELECT r.id,
-         COALESCE(r.request_date, date(r.created_at)) as doc_date,
-         COALESCE(SUM(ri.total_price), 0)
-           + CASE WHEN c.charges_efd = 1
-                  THEN COALESCE(SUM(ri.quantity), 0) * c.efd_profit_per_carton
-                  ELSE 0 END as amount,
-         r.truck_no, r.route
-  FROM requests r
-  JOIN customers c ON r.customer_id = c.id
-  LEFT JOIN request_items ri ON ri.request_id = r.id
-  WHERE r.customer_id = ? AND r.status IN ('approved','dispatched')
-  GROUP BY r.id`;
+import { ensureFinanceTables, CUSTOMER_INVOICES_SQL } from "@/lib/finance-schema";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -34,7 +17,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const to   = searchParams.get("to")   || "";
 
     const customerResult = await db.execute({
-      sql: "SELECT id, name, location, phone, is_export FROM customers WHERE id = ?",
+      sql: `SELECT id, name, location, phone, is_export, opening_balance, opening_balance_date
+            FROM customers WHERE id = ?`,
       args: [customerId],
     });
     if (!customerResult.rows.length) {
@@ -42,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const [invoices, creditNotes, payments] = await Promise.all([
-      db.execute({ sql: INVOICE_SQL, args: [customerId] }),
+      db.execute({ sql: CUSTOMER_INVOICES_SQL, args: [customerId] }),
       db.execute({
         sql: `SELECT cn.id, cn.credit_note_no, cn.credit_date as doc_date, cn.reason,
                      COALESCE(SUM(cni.total_price), 0) as amount
@@ -61,7 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     interface Line {
       date: string;
-      type: "invoice" | "credit_note" | "payment";
+      type: "opening_balance" | "invoice" | "credit_note" | "payment";
       ref: string;
       description: string;
       debit: number;
@@ -73,7 +57,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       cash: "Cash", bank: "Bank", mobile_money: "Mobile Money", cheque: "Cheque", other: "Other",
     };
 
+    const customer = customerResult.rows[0];
+    const openingBalanceLines: Line[] =
+      Number(customer.opening_balance) > 0
+        ? [{
+            // Sorts before all real documents when no date was recorded
+            date: String(customer.opening_balance_date || "1900-01-01"),
+            type: "opening_balance" as const,
+            ref: "OPENING",
+            description: "Opening balance brought forward",
+            debit: Number(customer.opening_balance),
+            credit: 0,
+          }]
+        : [];
+
     const allLines: Line[] = [
+      ...openingBalanceLines,
       ...invoices.rows.map((r) => ({
         date: String(r.doc_date),
         type: "invoice" as const,
