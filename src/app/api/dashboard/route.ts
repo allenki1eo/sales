@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import db from "@/lib/db";
+import { ensureFinanceTables } from "@/lib/finance-schema";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -12,6 +13,8 @@ export async function GET(req: NextRequest) {
   const isAdmin = session.user.role === "admin";
 
   try {
+    await ensureFinanceTables();
+
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month") || new Date().toISOString().slice(0, 7);
     const year  = month.slice(0, 4);
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
       yearlyRevenue, yearlyCartons,
       trend, topProducts, topCustomers, recent,
       exportVsLocal, topRoutes,
+      totalCredits, monthlyCredits, yearlyCredits,
     ] = await Promise.all([
       db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'pending'"),
       db.execute("SELECT COUNT(*) as count FROM requests WHERE status = 'approved'"),
@@ -136,6 +140,30 @@ export async function GET(req: NextRequest) {
         GROUP BY r.route
         ORDER BY cartons DESC
         LIMIT 8`),
+
+      db.execute(`
+        SELECT COALESCE(SUM(cni.total_price), 0) as total
+        FROM credit_note_items cni
+        JOIN credit_notes cn ON cni.credit_note_id = cn.id
+        WHERE cn.status = 'approved'`),
+
+      db.execute({
+        sql: `SELECT COALESCE(SUM(cni.total_price), 0) as total
+              FROM credit_note_items cni
+              JOIN credit_notes cn ON cni.credit_note_id = cn.id
+              WHERE cn.status = 'approved'
+              AND strftime('%Y-%m', cn.credit_date) = ?`,
+        args: [month],
+      }),
+
+      db.execute({
+        sql: `SELECT COALESCE(SUM(cni.total_price), 0) as total
+              FROM credit_note_items cni
+              JOIN credit_notes cn ON cni.credit_note_id = cn.id
+              WHERE cn.status = 'approved'
+              AND strftime('%Y', cn.credit_date) = ?`,
+        args: [year],
+      }),
     ]);
 
     if (!isAdmin) {
@@ -184,10 +212,11 @@ export async function GET(req: NextRequest) {
         approved_requests: Number(approved.rows[0].count) || 0,
         total_customers:   Number(customers.rows[0].count) || 0,
         total_products:    Number(products.rows[0].count) || 0,
-        total_revenue:     Number(totalRevenue.rows[0].total) || 0,
-        monthly_revenue:   Number(monthlyRevenue.rows[0].total) || 0,
+        // Revenue is net of approved credit notes
+        total_revenue:     (Number(totalRevenue.rows[0].total) || 0) - (Number(totalCredits.rows[0].total) || 0),
+        monthly_revenue:   (Number(monthlyRevenue.rows[0].total) || 0) - (Number(monthlyCredits.rows[0].total) || 0),
         monthly_cartons:   Number(monthlyCartons.rows[0].total) || 0,
-        yearly_revenue:    Number(yearlyRevenue.rows[0].total) || 0,
+        yearly_revenue:    (Number(yearlyRevenue.rows[0].total) || 0) - (Number(yearlyCredits.rows[0].total) || 0),
         yearly_cartons:    Number(yearlyCartons.rows[0].total) || 0,
       },
       trend:          trend.rows,

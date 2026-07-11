@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, MapPin, Phone, Package, Save, ChevronDown, ChevronRight, ArrowRight } from "lucide-react";
+import { ArrowLeft, Pencil, MapPin, Phone, Package, Save, ChevronDown, ChevronRight, ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -170,11 +170,18 @@ export default function ViewCustomerPage() {
             </div>
           </div>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/customers/${params.id}/edit`}>
-            <Pencil className="h-4 w-4 mr-1" />Edit
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/customers/${params.id}/statement`}>
+              <FileText className="h-4 w-4 mr-1" />Statement
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/customers/${params.id}/edit`}>
+              <Pencil className="h-4 w-4 mr-1" />Edit
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Badges */}
