@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, CheckCircle2, XCircle, Trash2, Printer } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Trash2, Printer, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -204,8 +204,13 @@ export default function CreditNoteDetailPage() {
           </CardContent>
         </Card>
 
-        {isAdmin && note.status === "pending" && (
+        {isAdmin && (
           <div className="flex flex-wrap justify-end gap-3">
+            <Button variant="outline" asChild disabled={acting}>
+              <Link href={`/credit-notes/${note.id}/edit`}>
+                <Pencil className="h-4 w-4" /> Edit
+              </Link>
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" className="text-red-600" disabled={acting}>
@@ -216,7 +221,10 @@ export default function CreditNoteDetailPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete this credit note?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {note.credit_note_no} will be permanently removed. This cannot be undone.
+                    {note.credit_note_no} will be permanently removed.
+                    {note.status === "approved"
+                      ? ` It is approved, so deleting it will increase ${note.customer_name}'s balance by ${formatCurrency(total)} and adjust dashboard revenue.`
+                      : ""} This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -227,12 +235,16 @@ export default function CreditNoteDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button variant="outline" className="text-red-600" onClick={() => setStatus("rejected")} disabled={acting}>
-              <XCircle className="h-4 w-4" /> Reject
-            </Button>
-            <Button onClick={() => setStatus("approved")} disabled={acting}>
-              <CheckCircle2 className="h-4 w-4" /> Approve
-            </Button>
+            {note.status === "pending" && (
+              <>
+                <Button variant="outline" className="text-red-600" onClick={() => setStatus("rejected")} disabled={acting}>
+                  <XCircle className="h-4 w-4" /> Reject
+                </Button>
+                <Button onClick={() => setStatus("approved")} disabled={acting}>
+                  <CheckCircle2 className="h-4 w-4" /> Approve
+                </Button>
+              </>
+            )}
           </div>
         )}
         {!isAdmin && note.status === "pending" && (
