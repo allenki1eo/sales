@@ -13,12 +13,39 @@ import { toast } from "sonner";
 
 interface StatementLine {
   date: string;
-  type: "invoice" | "credit_note" | "payment";
+  type: "opening_balance" | "invoice" | "credit_note" | "payment";
   ref: string;
   description: string;
   debit: number;
   credit: number;
   link?: string;
+}
+
+interface AllocationLine {
+  type: "opening_balance" | "invoice";
+  id: number | null;
+  ref: string;
+  date: string;
+  description: string;
+  amount: number;
+  cartons: number;
+  paid_amount: number;
+  outstanding: number;
+  cartons_paid: number;
+  cartons_pending: number;
+  status: "paid" | "partial" | "unpaid";
+}
+
+interface Allocation {
+  opening_balance: number;
+  total_invoiced: number;
+  total_credits: number;
+  total_outstanding: number;
+  unallocated_credit: number;
+  total_cartons: number;
+  cartons_paid: number;
+  cartons_pending: number;
+  lines: AllocationLine[];
 }
 
 interface Statement {
@@ -33,15 +60,27 @@ interface Statement {
 }
 
 const TYPE_STYLES: Record<string, string> = {
+  opening_balance: "bg-slate-100 text-slate-700",
   invoice:     "bg-indigo-100 text-indigo-700",
   credit_note: "bg-rose-100 text-rose-700",
   payment:     "bg-emerald-100 text-emerald-700",
 };
 
 const TYPE_LABELS: Record<string, string> = {
+  opening_balance: "Opening",
   invoice:     "Invoice",
   credit_note: "Credit Note",
   payment:     "Payment",
+};
+
+const ALLOC_STATUS_STYLES: Record<string, string> = {
+  paid:    "bg-emerald-100 text-emerald-700",
+  partial: "bg-amber-100 text-amber-700",
+  unpaid:  "bg-red-100 text-red-700",
+};
+
+const ALLOC_STATUS_LABELS: Record<string, string> = {
+  paid: "Paid", partial: "Partially Paid", unpaid: "Unpaid",
 };
 
 function defaultFrom() {
@@ -52,10 +91,20 @@ function defaultFrom() {
 
 export default function CustomerStatementPage() {
   const params = useParams();
-  const [statement, setStatement] = useState<Statement | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [from, setFrom]           = useState(defaultFrom());
-  const [to, setTo]               = useState(new Date().toISOString().slice(0, 10));
+  const [statement, setStatement]   = useState<Statement | null>(null);
+  const [allocation, setAllocation] = useState<Allocation | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [from, setFrom]             = useState(defaultFrom());
+  const [to, setTo]                 = useState(new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    fetch(`/api/customers/${params.id}/allocation`)
+      .then(async (r) => {
+        const d = await r.json();
+        if (r.ok) setAllocation(d);
+      })
+      .catch(() => setAllocation(null));
+  }, [params.id, statement]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -209,6 +258,99 @@ export default function CustomerStatementPage() {
                 </table>
               </CardContent>
             </Card>
+
+            {allocation && (
+              <Card>
+                <CardContent className="pt-6 space-y-4">
+                  <div>
+                    <h2 className="font-semibold">Order Payment Status (FIFO)</h2>
+                    <p className="text-xs text-muted-foreground">
+                      All money received is applied to the oldest debt first — opening balance, then orders in date order. All-time view, not affected by the date filter above.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Total Received</p>
+                      <p className="text-base font-bold text-emerald-600">{formatCurrency(allocation.total_credits)}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Still Outstanding</p>
+                      <p className={`text-base font-bold ${allocation.total_outstanding > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                        {formatCurrency(allocation.total_outstanding)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Cartons Paid For</p>
+                      <p className="text-base font-bold">{allocation.cartons_paid.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">of {allocation.total_cartons.toLocaleString()}</span></p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Cartons Pending</p>
+                      <p className={`text-base font-bold ${allocation.cartons_pending > 0 ? "text-amber-600" : ""}`}>
+                        {allocation.cartons_pending.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {allocation.unallocated_credit > 0.005 && (
+                    <p className="text-sm rounded-lg bg-emerald-50 text-emerald-700 p-3">
+                      This customer has {formatCurrency(allocation.unallocated_credit)} in advance credit beyond all invoiced orders.
+                    </p>
+                  )}
+
+                  <div className="space-y-2">
+                    {allocation.lines.map((l) => (
+                      <div
+                        key={`${l.type}-${l.id ?? "opening"}`}
+                        className="rounded-lg border p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">
+                              {l.type === "invoice" && l.id ? (
+                                <Link href={`/requests/${l.id}`} className="text-indigo-600 hover:underline">{l.ref}</Link>
+                              ) : l.ref}
+                              <span className="text-muted-foreground font-normal"> · {formatDate(l.date)}</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{l.description}</p>
+                          </div>
+                          <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium shrink-0 ${ALLOC_STATUS_STYLES[l.status]}`}>
+                            {ALLOC_STATUS_LABELS[l.status]}
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${l.status === "paid" ? "bg-emerald-500" : l.status === "partial" ? "bg-amber-500" : "bg-red-400"}`}
+                            style={{ width: `${l.amount > 0 ? Math.min((l.paid_amount / l.amount) * 100, 100) : 0}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            Paid {formatCurrency(l.paid_amount)} of {formatCurrency(l.amount)}
+                            {l.outstanding > 0.005 && (
+                              <span className="text-red-600 font-medium"> · {formatCurrency(l.outstanding)} outstanding</span>
+                            )}
+                          </span>
+                          {l.cartons > 0 && (
+                            <span>
+                              {l.cartons_paid.toLocaleString()} of {l.cartons.toLocaleString()} cartons paid
+                              {l.cartons_pending > 0 && (
+                                <span className="text-amber-600 font-medium"> · {l.cartons_pending.toLocaleString()} pending</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {!allocation.lines.length && (
+                      <p className="text-center text-sm text-muted-foreground py-6">
+                        No orders or opening balance for this customer yet
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>

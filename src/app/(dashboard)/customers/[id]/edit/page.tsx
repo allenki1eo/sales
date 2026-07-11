@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,6 +21,8 @@ const schema = z.object({
   is_export: z.boolean().default(false),
   charges_efd: z.boolean().default(false),
   efd_profit_per_carton: z.number().min(0).default(0),
+  opening_balance: z.number().min(0).default(0),
+  opening_balance_date: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -27,6 +30,8 @@ type FormData = z.infer<typeof schema>;
 export default function EditCustomerPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session } = useSession();
+  const canSetOpeningBalance = ["admin", "accountant"].includes(session?.user?.role ?? "");
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,6 +51,8 @@ export default function EditCustomerPage() {
           is_export: !!c.is_export,
           charges_efd: !!c.charges_efd,
           efd_profit_per_carton: Number(c.efd_profit_per_carton) || 0,
+          opening_balance: Number(c.opening_balance) || 0,
+          opening_balance_date: c.opening_balance_date || new Date().toISOString().slice(0, 10),
         });
         setLoaded(true);
       })
@@ -132,6 +139,29 @@ export default function EditCustomerPage() {
                 </div>
               )}
             </div>
+            {canSetOpeningBalance && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">Opening Balance</p>
+                    <p className="text-xs text-muted-foreground">
+                      Debt this customer carried before it was tracked here. Payments settle it first (FIFO), and it appears on their statement.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Amount (TZS)</Label>
+                      <Input type="number" min="0" step="0.01" {...register("opening_balance", { valueAsNumber: true })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">As at date</Label>
+                      <Input type="date" {...register("opening_balance_date")} />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
               <Button type="submit" disabled={submitting}>
