@@ -76,6 +76,81 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "admin") {
+    return NextResponse.json({ error: "Only admins can edit credit notes" }, { status: 403 });
+  }
+
+  try {
+    await ensureFinanceTables();
+
+    const id = parseInt(params.id);
+    const body = await req.json();
+    const { request_id, reason, credit_date, items } = body;
+
+    if (!reason || !items?.length) {
+      return NextResponse.json({ error: "Reason and at least one line are required" }, { status: 400 });
+    }
+    for (const item of items) {
+      const qty   = Number(item.quantity);
+      const price = Number(item.unit_price);
+      if (!item.product_id && !item.description) {
+        return NextResponse.json({ error: "Each line needs a product or a description" }, { status: 400 });
+      }
+      if (!(qty > 0) || !(price > 0)) {
+        return NextResponse.json({ error: "Quantities and amounts must be greater than zero" }, { status: 400 });
+      }
+    }
+
+    const existing = await db.execute({
+      sql: "SELECT id FROM credit_notes WHERE id = ?",
+      args: [id],
+    });
+    if (!existing.rows.length) {
+      return NextResponse.json({ error: "Credit note not found" }, { status: 404 });
+    }
+
+    const date = credit_date && /^\d{4}-\d{2}-\d{2}$/.test(credit_date)
+      ? credit_date
+      : new Date().toISOString().slice(0, 10);
+
+    // Replace header fields and all lines; status is untouched so an
+    // approved credit note stays approved after an admin correction.
+    await db.batch(
+      [
+        {
+          sql: "UPDATE credit_notes SET request_id = ?, reason = ?, credit_date = ? WHERE id = ?",
+          args: [request_id || null, reason, date, id],
+        },
+        {
+          sql: "DELETE FROM credit_note_items WHERE credit_note_id = ?",
+          args: [id],
+        },
+        ...items.map((item: { product_id?: number; description?: string; quantity: number; unit_price: number }) => ({
+          sql: `INSERT INTO credit_note_items (credit_note_id, product_id, description, quantity, unit_price, total_price)
+                VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            item.product_id || null,
+            item.description || null,
+            item.quantity,
+            item.unit_price,
+            item.quantity * item.unit_price,
+          ],
+        })),
+      ],
+      "write"
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[API /credit-notes/[id] PUT]", err);
+    return NextResponse.json({ error: err.message || "Database error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,13 +161,19 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await ensureFinanceTables();
 
-    const result = await db.execute({
-      sql: "DELETE FROM credit_notes WHERE id = ? AND status = 'pending'",
-      args: [parseInt(params.id)],
-    });
+    // Admins can delete any credit note regardless of status; balances and
+    // dashboard revenue are computed live so they adjust automatically.
+    // Lines are removed explicitly in case the connection has FKs disabled.
+    const [, result] = await db.batch(
+      [
+        { sql: "DELETE FROM credit_note_items WHERE credit_note_id = ?", args: [parseInt(params.id)] },
+        { sql: "DELETE FROM credit_notes WHERE id = ?", args: [parseInt(params.id)] },
+      ],
+      "write"
+    );
 
     if (!result.rowsAffected) {
-      return NextResponse.json({ error: "Only pending credit notes can be deleted" }, { status: 409 });
+      return NextResponse.json({ error: "Credit note not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
