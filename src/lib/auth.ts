@@ -3,6 +3,33 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
 
+/** Browser session lifetime. SSO sign-in uses the same value. */
+export const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+
+/**
+ * Cookie NextAuth reads back via getServerSession / getToken.
+ * HTTPS deployments (NEXTAUTH_URL) use the `__Secure-` prefix; HTTP does not.
+ */
+export function usesSecureSessionCookie(): boolean {
+  return Boolean(process.env.NEXTAUTH_URL?.startsWith("https://"));
+}
+
+export function sessionTokenCookie(): {
+  name: string;
+  options: {
+    httpOnly: true;
+    sameSite: "lax";
+    path: "/";
+    secure: boolean;
+  };
+} {
+  const secure = usesSecureSessionCookie();
+  return {
+    name: secure ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+    options: { httpOnly: true, sameSite: "lax", path: "/", secure },
+  };
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -57,13 +84,11 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: "/login" },
-  session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
+  session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   secret: process.env.NEXTAUTH_SECRET,
-  // Allow HTTP on local/internal network deployments (no HTTPS)
-  cookies: process.env.NEXTAUTH_URL?.startsWith("https://") ? undefined : {
-    sessionToken: {
-      name: "next-auth.session-token",
-      options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
-    },
-  },
+  // Allow HTTP on local/internal network deployments (no HTTPS).
+  // When NEXTAUTH_URL is https, NextAuth's defaults match sessionTokenCookie().
+  cookies: usesSecureSessionCookie()
+    ? undefined
+    : { sessionToken: sessionTokenCookie() },
 };

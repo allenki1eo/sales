@@ -6,6 +6,11 @@ export async function GET() {
     TURSO_AUTH_TOKEN:   !!process.env.TURSO_AUTH_TOKEN,
     NEXTAUTH_SECRET:    !!process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL:       process.env.NEXTAUTH_URL || "(not set)",
+    // Presence only. SSO sign-in fails closed until this is at least 32 chars
+    // and different from NEXTAUTH_SECRET. Password login does not require it.
+    SSO_SHARED_SECRET:
+      (process.env.SSO_SHARED_SECRET?.trim().length ?? 0) >= 32 &&
+      process.env.SSO_SHARED_SECRET?.trim() !== process.env.NEXTAUTH_SECRET?.trim(),
   };
 
   const dbOk = await (async () => {

@@ -16,6 +16,16 @@ CREATE TABLE IF NOT EXISTS users (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One-time IMS SSO handoff ids. Kept until after token exp.
+-- Also created at runtime by src/lib/sso-jti.ts (no manual migration required).
+CREATE TABLE IF NOT EXISTS sso_redeemed_jtis (
+  jti        TEXT    PRIMARY KEY,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sso_redeemed_jtis_expires_at
+  ON sso_redeemed_jtis (expires_at);
+
 -- Customers (extended with EFD fields)
 CREATE TABLE IF NOT EXISTS customers (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
