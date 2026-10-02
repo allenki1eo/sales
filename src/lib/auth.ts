@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
+import { SESSION_MAX_AGE_SECONDS, sessionTokenCookie } from "@/lib/session-token";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,6 +12,8 @@ export const authOptions: NextAuthOptions = {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
+      // Password sign-in only. IMS SSO never reaches this function; it verifies
+      // its own JWT and then issues the same NextAuth session cookie.
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
 
@@ -57,13 +60,17 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: "/login" },
-  session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
+  session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   secret: process.env.NEXTAUTH_SECRET,
-  // Allow HTTP on local/internal network deployments (no HTTPS)
-  cookies: process.env.NEXTAUTH_URL?.startsWith("https://") ? undefined : {
-    sessionToken: {
-      name: "next-auth.session-token",
-      options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
-    },
-  },
+  // Allow HTTP on local/internal network deployments (no HTTPS).
+  // When this override is absent, NextAuth uses its secure-cookie defaults.
+  // /api/sso/callback must set the same cookie name (see sessionTokenCookie).
+  cookies: process.env.NEXTAUTH_URL?.startsWith("https://")
+    ? undefined
+    : {
+        sessionToken: {
+          name: sessionTokenCookie().name,
+          options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
+        },
+      },
 };

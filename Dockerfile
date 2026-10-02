@@ -6,6 +6,7 @@
 #    TURSO_AUTH_TOKEN=your-turso-token
 #    NEXTAUTH_SECRET=your-random-secret
 #    NEXTAUTH_URL=https://your-domain.com
+#    SSO_SHARED_SECRET=same-value-as-ims   (IMS launch sign-in)
 #
 #  Build-time placeholders below are only so "next build" completes.
 #  The actual values are injected at runtime via docker run -e ...
