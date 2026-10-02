@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One-time IMS launch tokens (jti). Also created lazily by /api/sso/callback.
+CREATE TABLE IF NOT EXISTS sso_consumed_jti (
+  jti        TEXT    PRIMARY KEY,
+  expires_at INTEGER NOT NULL
+);
+
 -- Customers (extended with EFD fields)
 CREATE TABLE IF NOT EXISTS customers (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
